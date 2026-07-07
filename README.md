@@ -15,7 +15,7 @@ darajasigacha o'rganilgan mavzular va amaliy loyihalarni o'z ichiga oladi.
 - [x] getter, setter
 - [x] access modifiers
 - [x] Interface vs abstract class
-- [ ] ADO.NET
+- [x] ADO.NET
 
 ### Junior C
 - [ ] (keyinroq qo'shiladi)
