@@ -1,0 +1,13 @@
+# .NET build artifacts
+bin/
+obj/
+.vs/
+*.user
+
+# Local secrets — never commit real credentials
+**/appsettings.Development.json
+**/appsettings.Local.json
+
+# Rider / VS Code
+.idea/
+*.suo

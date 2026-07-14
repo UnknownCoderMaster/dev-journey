@@ -16,6 +16,7 @@ darajasigacha o'rganilgan mavzular va amaliy loyihalarni o'z ichiga oladi.
 - [x] access modifiers
 - [x] Interface vs abstract class
 - [x] ADO.NET
+- [x] Loyiha: HR Management API (ASP.NET Core + ADO.NET + PostgreSQL)
 
 ### Junior C
 - [ ] (keyinroq qo'shiladi)
