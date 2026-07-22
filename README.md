@@ -20,13 +20,14 @@ darajasigacha o'rganilgan mavzular va amaliy loyihalarni o'z ichiga oladi.
 
 ### Junior C
 - [x] Memory — Value/Reference types, ref, out, in, params
-- [ ] Boxing/Unboxing, Casting
-- [ ] Collections
-- [ ] Nullable
-- [ ] Tuples
-- [ ] try-catch-finally (chuqurroq)
-- [ ] Mocking, Testing
-- [ ] ControllerBase, ApiController
-- [ ] HTTP verbs, HTTPS
-- [ ] SQL (chuqurroq)
-- [ ] SSH, curl, telnet
+- [x] Boxing/Unboxing, Casting
+- [x] Collections — Array, IEnumerable, IQueryable, List, LinkedList
+- [x] Nullable — ?, ??, !, null!, default!
+- [x] Tuples
+- [x] try-catch-finally (chuqurroq)
+- [x] Testing — Mocking, xUnit, Fact, Theory, Assert
+- [x] ControllerBase, ApiController, Attributes
+- [x] HTTP verbs, Request/Response, HTTP va HTTPS
+- [x] SQL — Filtering, Grouping, Aggregate, Constraints
+- [x] SSH, curl, telnet
+- [ ] Loyiha: (keyinroq)
