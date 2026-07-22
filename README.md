@@ -19,4 +19,14 @@ darajasigacha o'rganilgan mavzular va amaliy loyihalarni o'z ichiga oladi.
 - [x] Loyiha: HR Management API (ASP.NET Core + ADO.NET + PostgreSQL)
 
 ### Junior C
-- [ ] (keyinroq qo'shiladi)
+- [x] Memory — Value/Reference types, ref, out, in, params
+- [ ] Boxing/Unboxing, Casting
+- [ ] Collections
+- [ ] Nullable
+- [ ] Tuples
+- [ ] try-catch-finally (chuqurroq)
+- [ ] Mocking, Testing
+- [ ] ControllerBase, ApiController
+- [ ] HTTP verbs, HTTPS
+- [ ] SQL (chuqurroq)
+- [ ] SSH, curl, telnet
