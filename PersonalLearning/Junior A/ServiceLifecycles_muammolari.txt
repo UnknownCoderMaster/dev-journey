@@ -1,0 +1,6 @@
+Transient > Scoped > Singleton
+
+Ushbu holatlarda agar biror o'zidan kichik scope ichida katta scope ishlatish runtime vaqtida xatolik beradi.
+Buni to'g'irlash uchun IScopeServiceFactory ishlatish kerak bo'ladi, ya'ni to'g'ridan-to'g'ri chaqirib bo'lmaydi.
+
+Holat nomi: CaptiveDependency
