@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>NLayerDemo.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ⚠️ E'TIBOR BERING: bu yerda NLayerDemo.DataAccess'ga ProjectReference
+         YO'Q — faqat BusinessLogic'ga! Api — DataAccess haqida COMPILE-TIME
+         darajasida UMUMAN bilmaydi (Dependency direction qat'iy saqlanadi). -->
+    <ProjectReference Include="..\NLayerDemo.BusinessLogic\NLayerDemo.BusinessLogic.csproj" />
+  </ItemGroup>
+
+</Project>

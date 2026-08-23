@@ -1,0 +1,16 @@
+@model Employee
+@{
+    ViewData["Title"] = "Xodim tafsilotlari";
+}
+<h1>@ViewData["Title"]</h1>
+<dl>
+    <dt>Ism</dt>
+    <dd>@Model.FullName</dd>
+    <dt>Bo'lim</dt>
+    <dd>@Model.Department</dd>
+    <dt>Maosh</dt>
+    <dd>@Model.Salary.ToString("N0")</dd>
+    <dt>Staj</dt>
+    <dd>@Model.YearsOfService yil</dd>
+</dl>
+<a asp-action="Index">&larr; Ro'yxatga qaytish</a>

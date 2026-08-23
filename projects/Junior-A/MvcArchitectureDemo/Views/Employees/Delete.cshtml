@@ -1,0 +1,12 @@
+@model Employee
+@{
+    ViewData["Title"] = "O'chirishni tasdiqlang";
+}
+<h1>@ViewData["Title"]</h1>
+<p>Rostdan ham <strong>@Model.FullName</strong>ni o'chirmoqchimisiz?</p>
+
+<form asp-action="Delete" asp-route-id="@Model.Id" method="post">
+    <input type="hidden" asp-for="Id" />
+    <button type="submit">Ha, o'chirish</button>
+    <a asp-action="Index">Bekor qilish</a>
+</form>

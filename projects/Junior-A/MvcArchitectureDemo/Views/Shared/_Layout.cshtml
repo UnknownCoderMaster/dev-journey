@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="utf-8" />
+    <title>@ViewData["Title"] - MVC Demo</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <header>
+        <nav>
+            <a asp-controller="Home" asp-action="Index">Bosh sahifa</a>
+            |
+            <a asp-controller="Employees" asp-action="Index">Xodimlar</a>
+        </nav>
+    </header>
+    <main>
+        @* TempData — REDIRECT'DAN KEYIN HAM saqlanadi, shuning uchun Create/Edit/Delete'dan
+           keyingi RedirectToAction(Index) natijasida BU XABAR shu yerda ko'rinadi. *@
+        @if (TempData["Message"] != null)
+        {
+            <div class="alert-success">@TempData["Message"]</div>
+        }
+        @RenderBody()
+    </main>
+</body>
+</html>

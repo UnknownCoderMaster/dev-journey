@@ -1,0 +1,31 @@
+@model Employee
+@{
+    ViewData["Title"] = "Yangi xodim qo'shish";
+}
+<h1>@ViewData["Title"]</h1>
+
+<form asp-action="Create" method="post">
+    <div asp-validation-summary="All" class="validation-summary"></div>
+    <div>
+        <label asp-for="FullName"></label>
+        <input asp-for="FullName" />
+        <span asp-validation-for="FullName" class="field-error"></span>
+    </div>
+    <div>
+        <label asp-for="Department"></label>
+        <input asp-for="Department" />
+        <span asp-validation-for="Department" class="field-error"></span>
+    </div>
+    <div>
+        <label asp-for="Salary"></label>
+        <input asp-for="Salary" />
+        <span asp-validation-for="Salary" class="field-error"></span>
+    </div>
+    <div>
+        <label asp-for="YearsOfService"></label>
+        <input asp-for="YearsOfService" />
+        <span asp-validation-for="YearsOfService" class="field-error"></span>
+    </div>
+    <button type="submit">Saqlash</button>
+</form>
+<a asp-action="Index">&larr; Bekor qilish</a>

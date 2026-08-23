@@ -1,0 +1,29 @@
+@model Employee
+@{
+    ViewData["Title"] = "Xodimni tahrirlash";
+}
+<h1>@ViewData["Title"]</h1>
+
+<form asp-action="Edit" asp-route-id="@Model.Id" method="post">
+    <input type="hidden" asp-for="Id" />
+    <div asp-validation-summary="All" class="validation-summary"></div>
+    <div>
+        <label asp-for="FullName"></label>
+        <input asp-for="FullName" />
+        <span asp-validation-for="FullName" class="field-error"></span>
+    </div>
+    <div>
+        <label asp-for="Department"></label>
+        <input asp-for="Department" />
+    </div>
+    <div>
+        <label asp-for="Salary"></label>
+        <input asp-for="Salary" />
+    </div>
+    <div>
+        <label asp-for="YearsOfService"></label>
+        <input asp-for="YearsOfService" />
+    </div>
+    <button type="submit">Yangilash</button>
+</form>
+<a asp-action="Index">&larr; Bekor qilish</a>

@@ -1,0 +1,25 @@
+@{
+    // ViewData["Title"] — Controller'da (HomeController.Index) o'rnatilgan, shu yerda o'qiladi.
+}
+<h1>@ViewData["Title"]</h1>
+<p>@ViewBag.WelcomeMessage</p>
+
+<h2>MVC so'rov oqimi (Request Flow)</h2>
+<ol>
+    <li><strong>Brauzer</strong> — <code>/Employees</code> manziliga so'rov yuboradi</li>
+    <li><strong>Controller</strong> (<code>EmployeesController.Index()</code>) — so'rovni qabul qiladi</li>
+    <li><strong>Model</strong> (<code>IEmployeeStore</code>) — xodimlar ro'yxatini beradi</li>
+    <li><strong>Controller</strong> — <code>return View(employees)</code> — Model'ni View'ga uzatadi</li>
+    <li><strong>View</strong> (<code>Employees/Index.cshtml</code>) — Model asosida HTML generatsiya qiladi</li>
+    <li><strong>Brauzer</strong> — tayyor HTML sahifani ko'rsatadi</li>
+</ol>
+
+<h2>Bu demoda sinab ko'rasiz</h2>
+<ul>
+    <li><strong>ViewBag / ViewData</strong> — shu sahifaning sarlavhasi va xabari aynan shular orqali keldi</li>
+    <li><strong>Strongly-typed Model</strong> — Xodimlar ro'yxati <code>@@model List&lt;Employee&gt;</code> orqali</li>
+    <li><strong>TempData</strong> — Yangi xodim qo'shing/tahrirlang/o'chiring, Redirect'dan keyin ham xabar SAQLANIB QOLGANINI ko'rasiz</li>
+    <li><strong>Model validation</strong> — Create formada bo'sh ism bilan yuborib ko'ring</li>
+</ul>
+
+<p><a asp-controller="Employees" asp-action="Index">Xodimlar ro'yxatiga o'tish &rarr;</a></p>

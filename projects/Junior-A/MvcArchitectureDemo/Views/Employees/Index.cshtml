@@ -1,0 +1,37 @@
+@model List<Employee>
+@{
+    // ViewBag.Title — Controller'da o'rnatilgan (EmployeesController.Index),
+    // ViewData["Title"]ga XUDDI SHU qiymatni "yozadi" (ikkalasi — BIR XIL manba).
+    ViewData["Title"] = ViewBag.Title;
+}
+<h1>@ViewData["Title"]</h1>
+
+<p><a asp-action="Create">+ Yangi xodim qo'shish</a></p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Ism</th>
+            <th>Bo'lim</th>
+            <th>Maosh</th>
+            <th>Staj</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var emp in Model)
+        {
+            <tr>
+                <td>@emp.FullName</td>
+                <td>@emp.Department</td>
+                <td>@emp.Salary.ToString("N0")</td>
+                <td>@emp.YearsOfService yil</td>
+                <td>
+                    <a asp-action="Details" asp-route-id="@emp.Id">Batafsil</a> |
+                    <a asp-action="Edit" asp-route-id="@emp.Id">Tahrirlash</a> |
+                    <a asp-action="Delete" asp-route-id="@emp.Id">O'chirish</a>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

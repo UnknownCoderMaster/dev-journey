@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="NLayerDemo.Api/NLayerDemo.Api.csproj" />
+  <Project Path="NLayerDemo.BusinessLogic/NLayerDemo.BusinessLogic.csproj" />
+  <Project Path="NLayerDemo.DataAccess/NLayerDemo.DataAccess.csproj" />
+</Solution>

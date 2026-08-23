@@ -1,0 +1,217 @@
+# SubQueries — Junior B
+
+## 1. What (Nima?)
+
+**Subquery** (subso'rov, ichma-ich so'rov) — **BOSHQA SQL
+SO'ROV ICHIDA JOYLASHGAN SO'ROV** — NATIJASI, TASHQI SO'ROVGA,
+QIYMAT, QATORLAR RO'YXATI, YOKI HATTO BUTUN "VAQTINCHALIK
+JADVAL" SIFATIDA UZATILADI. Subquery — `WHERE`, `FROM`,
+`SELECT`, HATTO `JOIN` BANDLARINING ISTALGAN QISMIDA
+ISHLATILISHI MUMKIN.
+
+## 2. Real hayot analogiyasi
+
+**Subquery — "AVVAL BUNI ANIQLAB OL, KEYIN ASOSIY SAVOLGA
+JAVOB BER" DEGAN SAVOL ICHIDAGI SAVOL.** Masalan: "ENG BALAND
+BO'YLI STUDENTLARNI TOPING" DEGAN O'RNIGA, "AVVAL, ENG BALAND
+BO'Y NECHA SANTIMETR EKANINI ANIQLANG (ICHKI SAVOL), KEYIN,
+SHU BO'YGA EGA BARCHA STUDENTLARNI TOPING (TASHQI SAVOL)". BU
+— IKKI QADAMLI MANTIQNI, BITTA, KETMA-KET SAVOLGA
+"JOYLASHTIRISH".
+
+## 3. Why (Nega kerak?)
+
+Ko'p SO'ROVLAR, **BOSQICHMA-BOSQICH MANTIQNI TALAB QILADI** —
+masalan, "ENG YUQORI MAOSHDAN YUQORI XODIMLARNI TOPISH" —
+AVVAL, "ENG YUQORI MAOSH NECHA" DEGAN QIYMATNI TOPISH KERAK,
+KEYIN, SHU QIYMAT ASOSIDA FILTRLASH KERAK. Subquery — BU IKKI
+QADAMNI, **BITTA, ATOMAR SO'ROV** ICHIDA IFODALASH IMKONINI
+BERADI — ALOHIDA, IKKI MARTA (birinchi natijani C# kodida
+ushlab, keyin ikkinchi so'rovga uzatish) SO'ROV YUBORISHDAN
+KO'RA, SAMARALIROQ (bitta TARMOQ SAYOHATI, DB SERVERI
+DARAJASIDA OPTIMALLASHTIRISH imkoniyati).
+
+## 4. Internals (Ichki mexanizm)
+
+### Scalar Subquery — BITTA QIYMAT QAYTARADI
+
+```sql
+SELECT * FROM employees
+WHERE salary > (SELECT AVG(salary) FROM employees);
+```
+
+```
+SCALAR SUBQUERY — BITTA QATOR, BITTA USTUNGA EGA QIYMAT
+QAYTARISHI KERAK. PostgreSQL, ICHKI SO'ROVNI, AVVAL
+(ODATDA) BAJARADI, NATIJANI (masalan AVG(salary) = 4500000)
+"QOTIRADI", KEYIN, TASHQI SO'ROVDA, BU QIYMATNI, ODDIY
+KONSTANT SIFATIDA ISHLATADI.
+```
+
+### Correlated Subquery — HAR TASHQI QATOR UCHUN QAYTA BAJARILADI
+
+```sql
+SELECT e.full_name, e.salary
+FROM employees e
+WHERE e.salary > (
+    SELECT AVG(salary) FROM employees e2 WHERE e2.department_id = e.department_id
+);
+```
+
+```
+CORRELATED SUBQUERY — ICHKI SO'ROV, TASHQI SO'ROVNING JORIY
+QATORIGA (e.department_id) "MUROJAAT QILADI" — bu, ICHKI
+SO'ROVNI, MUSTAQIL RAVISHDA, BIR MARTA BAJARIB BO'LMASLIGINI
+ANGLATADI: U, TASHQI SO'ROVNING **HAR BIR QATORI UCHUN,
+QAYTA-QAYTA BAJARILISHI** KERAK — bu, KATTA JADVALLARDA,
+PERFORMANCE JIHATDAN JIDDIY QIMMAT BO'LISHI MUMKIN (N marta
+bajarilish, N — tashqi so'rov qator soni).
+
+QUERY PLANNER, KO'PINCHA, CORRELATED SUBQUERY'NI, ICHKARIDA,
+SAMARALIROQ JOIN OPERATSIYASIGA "QAYTA YOZISHI" (rewrite)
+MUMKIN — LEKIN BU, HAR DOIM KAFOLATLANMAGAN.
+```
+
+### `IN`, `EXISTS`, `ANY`, `ALL` — Subquery bilan ISHLASH OPERATORLARI
+
+```sql
+-- IN — natija ro'yxatida bormi?
+SELECT * FROM employees WHERE department_id IN (SELECT id FROM departments WHERE name = 'IT');
+
+-- EXISTS — subquery HECH BO'LMAGANDA bitta qator qaytaradimi? (natija QIYMATI emas, MAVJUDLIGI muhim)
+SELECT * FROM departments d WHERE EXISTS (SELECT 1 FROM employees e WHERE e.department_id = d.id);
+
+-- NOT EXISTS — hech qanday bog'liq qator YO'Qmi?
+SELECT * FROM departments d WHERE NOT EXISTS (SELECT 1 FROM employees e WHERE e.department_id = d.id);
+```
+
+```
+EXISTS — SUBQUERY NATIJASINING QIYMATIGA (nima qaytaradi) 
+E'TIBOR BERMAYDI, FAQAT "HECH BO'LMAGANDA BITTA QATOR
+QAYTARDIMI?" DEGAN SAVOLGA JAVOB BERADI — bu, PostgreSQL'GA,
+BIRINCHI MOS QATOR TOPILGANDA, ICHKI SO'ROVNI DARHOL
+TO'XTATISH ("SHORT-CIRCUIT") IMKONINI BERADI — KO'PINCHA, `IN`
+GA NISBATAN, AYNIQSA KATTA SUBQUERY NATIJALARIDA, TEZROQ.
+```
+
+### `NOT IN` bilan NULL — XAVFLI KOMBINATSIYA
+
+```
+docs/Junior-B/database-design/null-values.md'da BATAFSIL
+YORITILGANIDEK — AGAR SUBQUERY NATIJASIDA HATTO BITTA NULL
+BO'LSA, `NOT IN` — BUTUN TASHQI SO'ROVNI, KUTILMAGANDA, BO'SH
+NATIJAGA OLIB KELADI (THREE-VALUED LOGIC SABABLI). `NOT
+EXISTS` — BU MUAMMODAN XOLI, VA ODATDA TAVSIYA ETILADI.
+```
+
+## 5. Code (Amaliy kod)
+
+```sql
+-- Scalar subquery — WHERE bandida
+SELECT full_name, salary FROM employees
+WHERE salary > (SELECT AVG(salary) FROM employees);
+
+-- Subquery — FROM bandida ("derived table")
+SELECT dept_name, avg_salary FROM (
+    SELECT d.name AS dept_name, AVG(e.salary) AS avg_salary
+    FROM employees e JOIN departments d ON e.department_id = d.id
+    GROUP BY d.name
+) AS dept_averages
+WHERE avg_salary > 5000000;
+
+-- Subquery — SELECT bandida (har qator uchun hisoblangan qiymat)
+SELECT
+    d.name,
+    (SELECT COUNT(*) FROM employees e WHERE e.department_id = d.id) AS employee_count
+FROM departments d;
+
+-- EXISTS — bog'liq yozuv borligini tekshirish (TAVSIYA ETILADI, NOT IN o'rniga)
+SELECT * FROM departments d
+WHERE NOT EXISTS (SELECT 1 FROM employees e WHERE e.department_id = d.id);
+```
+
+```csharp
+// EF Core LINQ — Subquery, avtomatik ravishda SQL subquery'ga tarjima qilinadi
+var aboveAverageEmployees = await dbContext.Employees
+    .Where(e => e.Salary > dbContext.Employees.Average(x => x.Salary)) // Scalar subquery
+    .ToListAsync();
+
+// EXISTS — Any() orqali
+var departmentsWithEmployees = await dbContext.Departments
+    .Where(d => dbContext.Employees.Any(e => e.DepartmentId == d.Id)) // EXISTS'ga tarjima qilinadi
+    .ToListAsync();
+
+// NOT EXISTS — !Any() orqali (NOT IN o'rniga TAVSIYA ETILADI)
+var departmentsWithoutEmployees = await dbContext.Departments
+    .Where(d => !dbContext.Employees.Any(e => e.DepartmentId == d.Id))
+    .ToListAsync();
+```
+
+## 6. Keng tarqalgan xatolar / noto'g'ri tushunchalar
+
+```
+❌ "Subquery — HAR DOIM, JOIN'GA NISBATAN, SEKINROQ" — HAR
+   DOIM EMAS! QUERY PLANNER, KO'PINCHA, SUBQUERY'NI, ICHKARIDA,
+   SAMARALI JOIN'GA "QAYTA YOZADI" — AMALIY PERFORMANCE FARQI,
+   KO'P HOLLARDA, KAM SEZILARLI YOKI YO'Q.
+
+❌ "NOT IN va NOT EXISTS — BIR XIL, ALMASHTIRIB BO'LADI" —
+   XAVFLI! `NOT IN`, SUBQUERY NATIJASIDA NULL BO'LSA, KUTIL-
+   MAGAN, BO'SH NATIJA BERISHI MUMKIN. `NOT EXISTS` — BU
+   MUAMMODAN XOLI, SHUNING UCHUN, ODATDA, TAVSIYA ETILADI.
+
+❌ "Correlated subquery — ODDIY subquery bilan BIR XIL
+   PERFORMANCE'GA EGA" — YO'Q! CORRELATED SUBQUERY — TASHQI
+   SO'ROVNING HAR QATORI UCHUN, QAYTA-QAYTA BAJARILISHI
+   MUMKIN — KATTA JADVALLARDA, BU, JIDDIY SEKINLASHISHGA
+   OLIB KELISHI MUMKIN.
+
+❌ "Scalar subquery — bir NECHTA QATOR QAYTARISHI MUMKIN" —
+   YO'Q! Agar SCALAR SUBQUERY, BIR NECHTA QATOR QAYTARSA —
+   PostgreSQL, RUNTIME XATOLIGI (`more than one row returned
+   by a subquery used as an expression`) BERADI.
+```
+
+## 7. Exam (Interview savollari)
+
+**1. Scalar Subquery va Correlated Subquery orasidagi FARQ
+nima?**
+Scalar Subquery — MUSTAQIL, TASHQI SO'ROVGA BOG'LIQ EMAS,
+BIR MARTA BAJARILADI VA BITTA QIYMAT QAYTARADI. Correlated
+Subquery — TASHQI SO'ROVNING JORIY QATORIGA MUROJAAT QILADI
+— TASHQI SO'ROVNING HAR QATORI UCHUN, QAYTA-QAYTA
+BAJARILISHI KERAK.
+
+**2. Nima uchun `NOT IN`, NULL QIYMATLI SUBQUERY NATIJASI
+BILAN BIRGA ISHLATILGANDA, XAVFLI HISOBLANADI, VA UNGA
+QANDAY ALTERNATIV TAVSIYA ETILADI?**
+`NOT IN` — AGAR SUBQUERY NATIJASIDA HATTO BITTA NULL BO'LSA
+— THREE-VALUED LOGIC SABABLI, BUTUN TASHQI SO'ROVNI,
+KUTILMAGANDA, BO'SH NATIJAGA OLIB KELADI. `NOT EXISTS` — BU
+MUAMMODAN XOLI, SHUNING UCHUN TAVSIYA ETILADI.
+
+**3. `EXISTS` operatori, SUBQUERY NATIJASINING "QIYMATIGA"
+EMAS, "MAVJUDLIGIGA" QARAB ISHLASHI, NIMA UCHUN PERFORMANCE
+JIHATDAN FOYDALI BO'LISHI MUMKIN?**
+Chunki PostgreSQL, `EXISTS` bilan ISHLAGANDA, ICHKI SO'ROVNI,
+BIRINCHI MOS QATOR TOPILGANDA, DARHOL TO'XTATISHI MUMKIN
+("short-circuit") — BUTUN NATIJA TO'PLAMINI HISOBLASH SHART
+EMAS, bu, KATTA SUBQUERY NATIJALARIDA, `IN`GA NISBATAN,
+TEZROQ BO'LISHI MUMKIN.
+
+**4. Subquery, SQL SO'ROVINING QAYSI QISMLARIDA (bandlarida)
+ISHLATILISHI MUMKIN?**
+`WHERE` (filtrlash uchun), `FROM` (derived table sifatida),
+`SELECT` (har qator uchun hisoblangan qiymat sifatida), va
+`JOIN` (murakkab birlashtirish shartlarida) — barcha asosiy
+SQL bandlarida ishlatilishi mumkin.
+
+**5. Correlated Subquery, KATTA JADVALLARDA, NIMA UCHUN
+JIDDIY PERFORMANCE MUAMMOSIGA OLIB KELISHI MUMKIN, VA BUNI
+QANDAY OLDINI OLISH MUMKIN?**
+Chunki U, TASHQI SO'ROVNING HAR BIR QATORI UCHUN, QAYTA-QAYTA
+BAJARILADI (N marta, N — tashqi qator soni) — bu, KATTA
+JADVALLARDA, SEKUNDLAR O'RNIGA, DAQIQALAR DAVOM ETISHI
+MUMKIN. Ko'pincha, BUNI, ODDIY JOIN + GROUP BY KOMBINATSIYASI
+BILAN QAYTA YOZISH (query planner ba'zan buni o'zi ham
+avtomatik qiladi) — PERFORMANCE'NI SEZILARLI YAXSHILAYDI.

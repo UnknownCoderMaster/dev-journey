@@ -1,0 +1,201 @@
+# JSON vs JSONB — Junior B
+
+## 1. What (Nima?)
+
+**`JSON`** — PostgreSQL'da, JSON MA'LUMOTINI, **ASL, MATN
+KO'RINISHIDA (EXACT TEXT)** SAQLOVCHI USTUN TURI. **`JSONB`**
+("B" — Binary) — JSON MA'LUMOTINI, **BINARY, PARSE QILINGAN
+(dekomponensiyalangan) FORMATDA** SAQLOVCHI USTUN TURI. Ikkisi
+HAM, STRUKTURASIZ (schema-less) MA'LUMOTNI (masalan, DINAMIK
+ATRIBUTLAR, TASHQI API JAVOBI) SAQLASH UCHUN MO'LJALLANGAN,
+LEKIN **ICHKI SAQLASH VA ISHLASH MEXANIZMI TUBDAN FARQ
+QILADI**.
+
+## 2. Real hayot analogiyasi
+
+**JSON — QO'LDA YOZILGAN, TARTIBLANMAGAN QAYD DAFTARI.**
+Har SAFAR SIZ UNDA BIRON MA'LUMOTNI QIDIRMOQCHI BO'LSANGIZ —
+BOSHIDAN OXIRIGACHA, HAR BIR QATORNI O'QIB CHIQISHINGIZ
+KERAK (chunki HECH QANDAY TARTIB/INDEKS YO'Q). **JSONB —
+ALFAVIT TARTIBIDA, MAXSUS PAPKALARGA JOYLASHTIRILGAN, RAQAM-
+LANGAN QAYDLAR TIZIMI** — MA'LUMOTNI TOPISH TEZROQ (chunki
+OLDINDAN "TAYYORLANGAN", TARTIBLANGAN), LEKIN BUNDAY TIZIMNI
+QURISH (yozish) — BIROZ KO'PROQ VAQT OLADI.
+
+## 3. Why (Nega kerak?)
+
+JSON — TEZ YOZISH (chunki HECH QANDAY QAYTA ISHLASH TALAB
+QILMAYDI, TO'G'RIDAN-TO'G'RI MATN SIFATIDA SAQLANADI) UCHUN
+MOS, LEKIN **HAR SO'ROVDA QAYTA PARSE QILINISHI KERAK** (sekin
+o'qish), VA **INDEKSLASH IMKONIYATI CHEKLANGAN**. JSONB —
+YOZISHDA BIROZ SEKINROQ (parse + qayta strukturalash kerak),
+LEKIN **O'QISH TEZROQ** (qayta parse qilish shart emas) VA
+**GIN INDEKS** ORQALI, ICHKI MAYDONLAR BO'YICHA TEZKOR
+QIDIRUV MUMKIN. Real LOYIHALARDA, **DEYARLI DOIM JSONB
+TAVSIYA ETILADI**.
+
+## 4. Internals (Ichki mexanizm)
+
+### JSON — MATN SAQLASH, HAR SO'ROVDA QAYTA PARSE
+
+```
+JSON USTUNI — QIYMATNI, ASL MATN (TEXT) KO'RINISHIDA,
+O'ZGARISHSIZ SAQLAYDI (BO'SH JOYLAR, KALITLAR TARTIBI —
+HAMMASI SAQLANIB QOLADI). HAR SAFAR, SIZ JSON ICHIDAGI
+BIRON MAYDONGA (`data->>'name'`) MUROJAAT QILGANINGIZDA —
+POSTGRESQL, BUTUN MATNNI, QAYTADAN, "ON-THE-FLY" (o'sha
+zahoti) PARSE QILADI — BU, HAR SO'ROVDA TAKRORLANADIGAN,
+QO'SHIMCHA CPU XARAJATI.
+```
+
+### JSONB — BINARY, DEKOMPOZITSIYALANGAN, PARSE QILINGAN FORMAT
+
+```
+JSONB USTUNI — MA'LUMOTNI, YOZISH PAYTIDA (INSERT/UPDATE),
+BIR MARTA PARSE QILIB, ICHKI, BINARY, TARTIBLANGAN FORMATGA
+AYLANTIRADI (masalan, OBYEKT KALITLARI — ALFAVIT TARTIBIDA
+TARTIBLANADI, DUPLIKAT KALITLAR — OLIB TASHLANADI, ORTIQCHA
+BO'SH JOYLAR — YO'QOTILADI). O'QISHDA — HECH QANDAY QAYTA
+PARSE QILISH KERAK EMAS, MA'LUMOT — TO'G'RIDAN-TO'G'RI, TAYYOR
+STRUKTURA SIFATIDA O'QILADI.
+```
+
+### GIN Index — FAQAT JSONB'GA QO'LLANILADI
+
+```sql
+CREATE INDEX idx_products_attrs ON products USING GIN (attributes);
+```
+
+```
+GIN (Generalized Inverted Index) — JSONB ICHIDAGI HAR BIR
+KALIT/QIYMATNI, ALOHIDA "TOKEN" SIFATIDA INDEKSLAYDI — bu,
+`attributes @> '{"color": "red"}'` KABI, ICHKI MAYDONLAR
+BO'YICHA QIDIRUVNI, SEQUENTIAL SCAN'SIZ, TEZKOR AMALGA
+OSHIRISHGA IMKON BERADI. JSON turi — BINARY, TARTIBLANGAN
+FORMATGA EGA BO'LMAGANI UCHUN, GIN INDEKSNI QO'LLAB-
+QUVVATLAMAYDI (indekslash — FAQAT JSONB uchun ishlaydi).
+```
+
+### JSONB — Kalitlar tartibi VA DUPLIKATLAR YO'QOLADI
+
+```sql
+SELECT '{"b": 2, "a": 1, "a": 3}'::json;   -- → {"b": 2, "a": 1, "a": 3} (ASL holat saqlanadi!)
+SELECT '{"b": 2, "a": 1, "a": 3}'::jsonb;  -- → {"a": 3, "b": 2} (tartiblangan, DUPLIKAT olib tashlangan — oxirgi qiymat qoladi)
+```
+
+## 5. Code (Amaliy kod)
+
+```sql
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    attributes JSONB NOT NULL DEFAULT '{}' -- JSONB — deyarli DOIM tavsiya etiladi
+);
+
+INSERT INTO products (name, attributes) VALUES
+    ('Noutbuk', '{"brand": "Dell", "ram_gb": 16, "color": "silver"}'),
+    ('Telefon', '{"brand": "Samsung", "ram_gb": 8, "color": "black"}');
+
+-- Ichki maydonni o'qish
+SELECT name, attributes->>'brand' AS brand FROM products;
+
+-- Ichki maydon bo'yicha filtrlash (GIN indeks bilan tez ishlaydi)
+CREATE INDEX idx_products_attrs ON products USING GIN (attributes);
+SELECT * FROM products WHERE attributes @> '{"brand": "Dell"}';
+
+-- Ichki maydonni yangilash (faqat bitta kalitni o'zgartirish)
+UPDATE products SET attributes = attributes || '{"color": "black"}'::jsonb WHERE id = 1;
+```
+
+```csharp
+// EF Core — JSONB ustunini C# obyekt sifatida modellashtirish (EF Core 7+ ile Owned Types / JSON columns)
+public class Product
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = null!;
+    public ProductAttributes Attributes { get; set; } = new();
+}
+
+public class ProductAttributes
+{
+    public string Brand { get; set; } = null!;
+    public int RamGb { get; set; }
+    public string Color { get; set; } = null!;
+}
+
+public class AppDbContext : DbContext
+{
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Product>()
+            .OwnsOne(p => p.Attributes, builder => builder.ToJson()); // JSONB ustun sifatida saqlanadi (Npgsql provider)
+    }
+}
+```
+
+## 6. Keng tarqalgan xatolar / noto'g'ri tushunchalar
+
+```
+❌ "JSON va JSONB — BIR XIL, FAQAT NOMI FARQ QILADI" — YO'Q!
+   ICHKI SAQLASH FORMATI TUBDAN FARQ QILADI: JSON — ASL MATN,
+   JSONB — BINARY, PARSE QILINGAN. Bu, PERFORMANCE, INDEKSLASH,
+   VA HATTO KALITLAR TARTIBI/DUPLIKATLARGA TA'SIR QILADI.
+
+❌ "JSON, JSONB'DAN HAR DOIM SEKINROQ, SHUNING UCHUN HECH
+   QACHON ISHLATILMASLIGI KERAK" — DEYARLI TO'G'RI, LEKIN
+   BITTA ISTISNO: AGAR SIZGA ASL MATNNI, ANIQ, O'ZGARISHSIZ
+   (kalitlar tartibi, bo'sh joylar) SAQLASH MUHIM BO'LSA
+   (masalan AUDIT LOG UCHUN) — JSON TO'G'RIROQ TANLOV.
+
+❌ "JSON ustunlarda HAM, GIN INDEKS ISHLAYDI" — YO'Q! GIN
+   INDEKS — FAQAT JSONB'GA QO'LLANILADI (JSON — TARTIBLANGAN
+   BINARY FORMATGA EGA EMAS).
+
+❌ "JSONB — struktura sxemasi (schema) TALAB QILMAGANI UCHUN,
+   HAR QANDAY MA'LUMOTNI JSONB'DA SAQLASH — TO'G'RI DIZAYN
+   YECHIMI" — YO'Q! Agar MA'LUMOT STRUKTURASI OLDINDAN MA'LUM
+   VA BARQAROR BO'LSA — ODDIY, ANIQ USTUNLAR (relyatsion
+   model) — ODATDA, TIP XAVFSIZLIGI VA CONSTRAINT'LAR TUFAYLI,
+   YAXSHIROQ TANLOV.
+```
+
+## 7. Exam (Interview savollari)
+
+**1. JSON va JSONB orasidagi ASOSIY, ICHKI (internals)
+DARAJADAGI FARQ nima?**
+JSON — MA'LUMOTNI, ASL MATN (TEXT) KO'RINISHIDA SAQLAYDI,
+HAR SO'ROVDA QAYTA PARSE QILINADI. JSONB — MA'LUMOTNI,
+YOZISH PAYTIDA BIR MARTA PARSE QILIB, BINARY, TARTIBLANGAN
+FORMATGA AYLANTIRADI — O'QISHDA QAYTA PARSE QILISH SHART
+EMAS.
+
+**2. Nima uchun GIN INDEKS, FAQAT JSONB USTUNLARGA QO'LLANILADI,
+JSON'GA EMAS?**
+GIN INDEKS — MA'LUMOTNING ICHKI, TARTIBLANGAN, BINARY
+STRUKTURASIGA TAYANADI (har kalit/qiymatni alohida token
+sifatida indekslaydi). JSON — SHUNCHAKI MATN BO'LGANI UCHUN,
+BUNDAY STRUKTURALASHTIRILGAN INDEKSLASHGA MOS EMAS.
+
+**3. `'{"a": 1, "a": 2}'::json` va `'{"a": 1, "a":
+2}'::jsonb` orasidagi FARQNI TUSHUNTIRING.**
+JSON — DUPLIKAT KALITLARNI, ASL HOLATIDA (ikkalasini ham)
+SAQLAB QOLADI. JSONB — DUPLIKAT KALITLARNI OLIB TASHLAYDI,
+FAQAT OXIRGI QIYMATNI (`{"a": 2}`) SAQLAYDI — chunki U,
+YOZISH PAYTIDA, MA'LUMOTNI QAYTA STRUKTURALASHTIRADI.
+
+**4. Qaysi holatda JSON, JSONB'DAN KO'RA, TO'G'RIROQ TANLOV
+BO'LISHI MUMKIN?**
+Agar ASL MATNNI, O'ZGARISHSIZ (aniq kalitlar tartibi, bo'sh
+joylar, duplikatlar) SAQLASH MUHIM BO'LSA (masalan AUDIT
+LOG, YOKI TASHQI API'DAN KELGAN "ASL" JAVOBNI SAQLASH kerak
+bo'lganda) — JSON TO'G'RIROQ TANLOV, chunki U MA'LUMOTNI
+O'ZGARTIRMAYDI.
+
+**5. `attributes @> '{"brand": "Dell"}'` KABI SO'ROV, JSONB
+USTUNIDA, GIN INDEKS BOR bo'lganda, QANDAY MEXANIZM ORQALI
+TEZLASHTIRILADI?**
+GIN INDEKS — JSONB ICHIDAGI HAR BIR KALIT-QIYMAT JUFTLIGINI,
+ALOHIDA "TOKEN" SIFATIDA INDEKSLAGANI UCHUN, `@>` (containment,
+"o'z ichiga oladimi") OPERATORI — SEQUENTIAL SCAN O'RNIGA,
+TO'G'RIDAN-TO'G'RI, INDEKS ORQALI, MOS QATORLARNI TOPADI —
+QIDIRUV MURAKKABLIGI SEZILARLI KAMAYADI.
