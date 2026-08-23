@@ -306,3 +306,174 @@ foreach (var emp in employees)
    foyda beradi?
 7. Abstract klass va Interfeys orasidagi asosiy farqlarni ayting.
 8. Constructor chaining (`base()`) qanday ishlaydi?
+
+---
+
+## 8. Mohiyat — Restoran analogiyasi orqali tushuntirish
+
+OOP prinsiplarini koddan oldin haqiqiy hayot orqali tushunish muhim.
+Kod yozayotganda har safar "Bu restoran qoidalariga mos keladimi?" deb
+o'ylang — shu yetarli.
+
+---
+
+### Encapsulation — "Har narsa o'z joyida, tashqariga faqat keraklisi ko'rinadi"
+
+Oshxonada oshpaz ovqat tayyorlaydi. Mehmon faqat menyuni ko'radi va
+buyurtma beradi. Oshxona ichida nima bo'layotgani — qaysi ingredientlar
+ishlatilayapti, qaysi texnologiya bilan tayyorlanayapti — mehmonni
+qiziqtirmaydi va qiziqtirmasligi kerak.
+
+Agar mehmon oshxonaga kirib, o'zi pishirsa — bu tartibsizlik. Kimdir
+noto'g'ri narsani qo'shishi mumkin, jarayon buzilishi mumkin.
+
+**Mohiyat:** Ichki jarayonlar yashiriladi. Tashqariga faqat "buyurtma
+ber" va "ovqatni ol" imkoniyati beriladi. Bu yashirish — himoya ham,
+tartib ham.
+
+```
+Tashqariga ko'rinadigan:        Yashirilgan:
+─────────────────────────       ─────────────────────────
+Menyu ko'rish                    Ingredientlar tarkibi
+Buyurtma berish                  Tayyorlash jarayoni
+Ovqatni olish                    Oshxona jihozlari
+To'lov qilish                    Ichki hisob-kitob
+```
+
+---
+
+### Inheritance — "Umumiy narsani bir joyda yoz, takrorlama"
+
+Restoranda bir nechta xodim bor: ofitsiant, kassir, menejer. Bularning
+hammasi "Xodim" — barchasi ish vaqtiga ega, barchasi maosh oladi,
+barchasi kartochka bilan kiradi. Bu umumiy narsalar.
+
+Lekin ofitsiant stol xizmat qiladi, kassir pul qabul qiladi, menejer
+smena boshqaradi — bu esa har birining o'ziga xos vazifasi.
+
+Agar siz har bir lavozim uchun "maosh hisoblash" qoidasini
+alohida-alohida yozsangiz, ertaga maosh miqdori o'zgarganda hammasini
+topib o'zgartirishingiz kerak. Lekin umumiy "Xodim" qoidasida bir
+joyda yozsangiz — bir yerda o'zgartirish yetarli.
+
+**Mohiyat:** Takrorlanuvchi narsalarni bir joyga jam qiling. O'zgarish
+kerak bo'lsa — bitta joyda o'zgartiring.
+
+```
+     XODIM (umumiy)
+     ─────────────
+     Ish vaqti
+     Maosh
+     Kartochka
+          │
+┌─────────┼─────────┐
+│         │         │
+Ofitsiant Kassir  Menejer
+(stol)    (pul)   (smena)
+```
+
+---
+
+### Polymorphism — "Bir xil buyruq, har xil natija"
+
+Menejer barcha xodimlarga "Ish boshlang!" deydi. Ofitsiant stollarga
+boradi, kassir kassaga o'tiradi, oshpaz oshxonaga kiradi. Hammasi bir
+xil buyruqni eshitdi, lekin har biri o'zicha harakat qildi.
+
+Menejer "ofitsiant ish boshlang", "kassir ish boshlang" deb
+alohida-alohida buyruq bermaydi. "Hammaga: ish boshlang!" — shu yetarli.
+Kim nima qilishini o'zi biladi.
+
+**Mohiyat:** Bitta buyruq — ko'p xulq. Yangi lavozim qo'shsangiz,
+faqat o'sha lavozimning "ish boshlash" qoidasini yozsangiz yetarli.
+Menejer kodini o'zgartirishning hojati yo'q.
+
+```
+        Menejer: "Ish boshlang!"
+                  │
+      ┌───────────┼───────────┐
+      ▼           ▼           ▼
+  Ofitsiant     Kassir      Oshpaz
+  stollarga     kassaga     oshxonaga
+  boradi        o'tiradi    kiradi
+
+  (Bir xil buyruq — har xil natija)
+```
+
+---
+
+### Abstraction — "Murakkablikni yashir, oddiyini ko'rsat"
+
+Mehmon menyudan "Qozon kabob" tanlaydi va tugmani bosadi. U go't
+yoqilishini, idishlar yuvilishini, ingredientlar tayyorlanishini
+bilmaydi — bilishi ham shart emas. U faqat "buyurtma" va "tayyor
+ovqat" ko'radi.
+
+Yoki yanada soddaroq: siz mashinada gaz pedalini bosasiz — mashina
+ilgari ketadi. Motor qanday ishlashi, benzin qanday yonishi — siz
+buni bilmasangiz ham bo'ladi. Pedal — bu abstraktsiya.
+
+**Mohiyat:** Foydalanuvchiga faqat kerakli narsani ko'rsat. Ichki
+murakkablikni yashir. Bu ishni osonlashtiradi va xatolarni kamaytiradi.
+
+```
+Mehmon ko'radigan:      Yashirilgan murakkablik:
+──────────────────      ───────────────────────
+Menyu                    Go't yoqish jarayoni
+Buyurtma tugmasi          Ingredientlar o'lchovi
+"Tayyor" xabari           Idish yuvish
+                          Tayyorlash vaqti hisoblash
+```
+
+---
+
+### Hammasi birgalikda
+
+```
+                    RESTORAN
+                       │
+    ├── Mehmon faqat menyu ko'radi          ← Abstraction
+    │   (oshxona ichini bilmaydi)
+    │
+    ├── Oshxona jarayoni yashirilgan         ← Encapsulation
+    │   (mehmon to'g'ridan kirolmaydi)
+    │
+    ├── Xodimlar — hammasi "Xodim"           ← Inheritance
+    │   (maosh, vaqt — bir joyda)
+    │   lekin har biri o'z ishini qiladi
+    │
+    └── "Ish boshlang!" — bir buyruq         ← Polymorphism
+        har biri o'zicha tushunadi
+```
+
+---
+
+### Nima uchun bu muhim?
+
+Bu prinsiplar ixtiro qilinmagan — **haqiqiy hayotdan olingan.** Dunyo
+allaqachon shu tarzda ishlaydi: kasalxonada shifokor va hamshiraning
+vazifalari ajratilgan, zavodda har sex o'z ishini qiladi, davlatda
+har vazirlik o'z sohasini boshqaradi.
+
+Kod ham xuddi shunday tashkil etilishi kerak. Chunki tartibli
+tashkil etilgan narsa — o'zgarishga chidamli, tushunishga oson va
+kengaytirishga qulay.
+
+> **Eslab qolish uchun bitta savol:**
+> "Bu kod o'zgarsa yoki kengaysa, qancha joy o'zgartiraman?"
+> Agar javob "ko'p joy" bo'lsa — OOP prinsiplari buzilgan.
+
+---
+
+### O'z-o'zini tekshirish savollari
+
+1. Encapsulation qaysi muammoni hal qiladi? Restoran misolida
+   kim nima ko'radi va nima yashiriladi?
+2. Inheritance bo'lmasa nima bo'ladi? Maosh foizi o'zgarganda
+   qancha joy o'zgartirish kerak bo'lardi?
+3. Polymorphism nima uchun kerak? Yangi lavozim qo'shilganda
+   menejer kodi o'zgaradimi?
+4. Abstraction va Encapsulation o'xshash ko'rinadi — ularning
+   asosiy farqi nima?
+5. Restoran misolida OOP buzilgan holat tasavvur qiling —
+   nima noto'g'ri bo'lar edi?
