@@ -1,0 +1,55 @@
+#version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: taskflow_postgres
+    environment:
+      POSTGRES_DB: taskflow_db
+      POSTGRES_USER: taskflow_user
+      POSTGRES_PASSWORD: taskflow_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - taskflow_network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: taskflow_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: taskflow_user
+      RABBITMQ_DEFAULT_PASS: taskflow_pass
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # Management UI: http://localhost:15672
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - taskflow_network
+
+  minio:
+    image: myminio:latest
+    container_name: taskflow_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: taskflow_user
+      MINIO_ROOT_PASSWORD: taskflow_pass123
+      MINIO_VOLUMES: "/data"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - taskflow_network
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  minio_data:
+
+networks:
+  taskflow_network:
+    driver: bridge
