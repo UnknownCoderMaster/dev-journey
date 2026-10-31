@@ -83,6 +83,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseDefaultFiles();   // / so'ralganda index.html beradi
+app.UseStaticFiles();    // wwwroot dan fayllarni uzatadi
+
 app.UseAuthentication();
 app.UseAuthorization();
 

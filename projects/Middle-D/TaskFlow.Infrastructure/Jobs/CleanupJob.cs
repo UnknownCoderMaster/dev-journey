@@ -1,10 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace TaskFlow.Infrastructure.Jobs;
 
-namespace TaskFlow.Infrastructure.Jobs
+public class CleanupJob
 {
-    internal class CleanupJob
-    {
-    }
 }

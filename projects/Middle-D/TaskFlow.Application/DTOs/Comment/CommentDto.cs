@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace TaskFlow.Application.DTOs.Comment;
 
-namespace TaskFlow.Application.DTOs.Comment
-{
-    internal class CommentDto
-    {
-    }
-}
+public record CommentDto(
+    int Id,
+    string Content,
+    int AuthorId,
+    string AuthorName,
+    DateTime CreatedAt);

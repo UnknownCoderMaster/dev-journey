@@ -35,6 +35,7 @@ public static class DependencyInjection
 
         // RabbitMQ
         services.AddSingleton<IRabbitMQPublisher, RabbitMQPublisher>();
+        services.AddHostedService<RabbitMQConsumer>();
 
         // JWT TokenService
         services.AddScoped<ITokenService, TokenService>();
