@@ -11,3 +11,7 @@ obj/
 # Rider / VS Code
 .idea/
 *.suo
+
+# Python (tools/docgen)
+__pycache__/
+*.py[cod]
