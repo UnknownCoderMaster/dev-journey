@@ -1,0 +1,179 @@
+/* ───────────────────────────────────────────────────────────────
+   Dizayn tokenlari — rasmiy, vazmin uslub.
+   Bitta aksent rang, qolgani neytral shkala.
+   ─────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Neytral shkala */
+  --c-white: #ffffff;
+  --c-gray-25: #fcfcfd;
+  --c-gray-50: #f8f9fa;
+  --c-gray-100: #f1f3f5;
+  --c-gray-200: #e6e8eb;
+  --c-gray-300: #d4d7dc;
+  --c-gray-400: #a8aeb8;
+  --c-gray-500: #787f8a;
+  --c-gray-600: #565d68;
+  --c-gray-700: #3d434d;
+  --c-gray-800: #272b32;
+  --c-gray-900: #15181d;
+
+  /* Aksent — to'q ko'k, korporativ */
+  --c-accent-50: #eef2f9;
+  --c-accent-100: #d8e2f2;
+  --c-accent-300: #8fa9d4;
+  --c-accent-500: #2f5597;
+  --c-accent-600: #26477f;
+  --c-accent-700: #1d3763;
+
+  /* Holat ranglari — faqat belgi va ogohlantirishlar uchun */
+  --c-success-50: #edf7f0;
+  --c-success-500: #2e7d4f;
+  --c-warning-50: #fdf6e8;
+  --c-warning-500: #9a6b10;
+  --c-danger-50: #fcf0f0;
+  --c-danger-500: #a33232;
+  --c-danger-600: #8a2a2a;
+
+  /* Semantik — ilova shu nomlarni ishlatadi */
+  --bg-page: var(--c-gray-50);
+  --bg-surface: var(--c-white);
+  --bg-surface-raised: var(--c-white);
+  --bg-subtle: var(--c-gray-100);
+  --bg-hover: var(--c-gray-100);
+  --bg-active: var(--c-gray-200);
+
+  --text-primary: var(--c-gray-900);
+  --text-secondary: var(--c-gray-600);
+  --text-muted: var(--c-gray-500);
+  --text-inverse: var(--c-white);
+  --text-accent: var(--c-accent-600);
+
+  --border-default: var(--c-gray-200);
+  --border-strong: var(--c-gray-300);
+  --border-focus: var(--c-accent-500);
+
+  /* Tipografiya */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, 'SF Mono', Menlo, monospace;
+
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.8125rem;
+  --fs-base: 0.875rem;
+  --fs-md: 0.9375rem;
+  --fs-lg: 1.0625rem;
+  --fs-xl: 1.25rem;
+  --fs-2xl: 1.5rem;
+
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  --lh-tight: 1.25;
+  --lh-normal: 1.5;
+  --lh-relaxed: 1.65;
+
+  /* Oraliqlar — 4px panjara */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.25rem;
+  --sp-6: 1.5rem;
+  --sp-8: 2rem;
+  --sp-10: 2.5rem;
+  --sp-12: 3rem;
+
+  /* Radius — vazmin, o'ynoqi emas */
+  --r-sm: 3px;
+  --r-md: 5px;
+  --r-lg: 7px;
+  --r-full: 999px;
+
+  /* Soya — juda yengil */
+  --sh-xs: 0 1px 2px rgba(21, 24, 29, 0.05);
+  --sh-sm: 0 1px 3px rgba(21, 24, 29, 0.08), 0 1px 2px rgba(21, 24, 29, 0.04);
+  --sh-md: 0 4px 12px rgba(21, 24, 29, 0.08), 0 1px 3px rgba(21, 24, 29, 0.05);
+  --sh-lg: 0 12px 32px rgba(21, 24, 29, 0.12), 0 2px 8px rgba(21, 24, 29, 0.06);
+
+  --ring-focus: 0 0 0 3px var(--c-accent-100);
+
+  /* Layout o'lchamlari */
+  --h-header: 52px;
+  --w-sidebar: 232px;
+  --w-container: 1360px;
+
+  --transition: 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Tungi rejim — tizim sozlamasi bo'yicha */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg-page: #101317;
+    --bg-surface: #171b20;
+    --bg-surface-raised: #1d2228;
+    --bg-subtle: #1f242a;
+    --bg-hover: #232931;
+    --bg-active: #2a313a;
+
+    --text-primary: #e8eaed;
+    --text-secondary: #a8aeb8;
+    --text-muted: #868d97;
+    --text-accent: #8fa9d4;
+
+    --border-default: #2a313a;
+    --border-strong: #3a424d;
+
+    --c-accent-50: #1a2434;
+    --c-accent-100: #243352;
+
+    --c-success-50: #16251c;
+    --c-success-500: #5fb67f;
+    --c-warning-50: #272013;
+    --c-warning-500: #d4a853;
+    --c-danger-50: #2a1818;
+    --c-danger-500: #e08787;
+
+    --ring-focus: 0 0 0 3px rgba(143, 169, 212, 0.22);
+
+    --sh-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --sh-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --sh-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+    --sh-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg-page: #101317;
+  --bg-surface: #171b20;
+  --bg-surface-raised: #1d2228;
+  --bg-subtle: #1f242a;
+  --bg-hover: #232931;
+  --bg-active: #2a313a;
+
+  --text-primary: #e8eaed;
+  --text-secondary: #a8aeb8;
+  --text-muted: #868d97;
+  --text-accent: #8fa9d4;
+
+  --border-default: #2a313a;
+  --border-strong: #3a424d;
+
+  --c-accent-50: #1a2434;
+  --c-accent-100: #243352;
+
+  --c-success-50: #16251c;
+  --c-success-500: #5fb67f;
+  --c-warning-50: #272013;
+  --c-warning-500: #d4a853;
+  --c-danger-50: #2a1818;
+  --c-danger-500: #e08787;
+
+  --ring-focus: 0 0 0 3px rgba(143, 169, 212, 0.22);
+
+  --sh-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --sh-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --sh-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
