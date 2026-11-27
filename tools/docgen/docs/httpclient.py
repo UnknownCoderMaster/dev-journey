@@ -298,7 +298,98 @@ var handler = new SocketsHttpHandler();
 handler.SslOptions.ClientCertificates = [certificate];""")
 
     # ───────────────────────────────────────────
-    h1(d, "8. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: Refit va olti qatlamli handler zanjiri")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida yigirmaga yaqin servis bir-biriga HTTP orqali "
+            "murojaat qiladi. Hech bir joyda `HttpClient` qo'lda yozilmaydi — har bir "
+            "servis o'z SDK sini Refit interfeysi sifatida e'lon qiladi, iste'molchi esa "
+            "shu interfeysni inject qiladi.")
+
+    para(d, "Ro'yxatga olish bitta umumiy metodda jamlangan. 2-bo'limda aytilgan "
+            "`IHttpClientFactory` shu yerda `AddRefitClient` ichida ishlaydi:")
+
+    code(d, """public static void RegisterApiClient<T>(this IServiceCollection services,
+                                        SdkConfig config,
+                                        RefitSettings refitSettings = null)
+    where T : class
+{
+    var builder = services.AddRefitClient<T>(refitSettings)
+        .ConfigureHttpClient(c => c.BaseAddress = new Uri(config.BaseUrl))
+        .AddHttpMessageHandler<LanguageHeaderHandler>()
+        .AddHttpMessageHandler<UserHeaderHandler>()
+        .AddHttpMessageHandler<PersonHeaderHandler>()
+        .AddHttpMessageHandler<LegalHeaderHandler>()
+        .AddHttpMessageHandler<ApiErrorHandler>()
+        .AddHttpMessageHandler<AppHeaderHandler>();
+
+    if (!string.IsNullOrWhiteSpace(config.ServiceKey))
+        builder.AddHttpMessageHandler(sp => new ServiceKeyHeaderHandler(sp, config.ServiceKey));
+}""", caption="Erp.Core.Sdk/Extensions/ServiceCollectionExtensions.cs")
+
+    h2(d, "8.1 Handler lar nima qiladi")
+
+    para(d, "Har biri `DelegatingHandler` dan meros oladi va bitta vazifani bajaradi. "
+            "Masalan til sarlavhasini uzatadigani:")
+
+    code(d, """protected override async Task<HttpResponseMessage> SendAsync(
+    HttpRequestMessage request, CancellationToken cancellationToken)
+{
+    var httpContext = _serviceProvider.GetService<IHttpContextAccessor>()?.HttpContext;
+
+    if (httpContext != null)
+    {
+        // 1. Headerdan olishga urining (frontend yuborganda)
+        var langValue = GetLanguageFromHeader(httpContext)
+                     // 2. Yo'q bo'lsa query parametrdan ol (boshqa service yuborganda)
+                     ?? GetLanguageFromQuery(httpContext);
+
+        if (!string.IsNullOrEmpty(langValue))
+        {
+            // Duplicate bo'lmasligi uchun
+            if (request.Headers.Contains(ApplicationHeaderConst.Language))
+                request.Headers.Remove(ApplicationHeaderConst.Language);
+
+            request.Headers.Add(ApplicationHeaderConst.Language, langValue);
+        }
+    }
+
+    return await base.SendAsync(request, cancellationToken);
+}""", caption="LanguageHeaderHandler")
+
+    para(d, "Bu kodda ikki nozik joy bor. Birinchisi — `IHttpContextAccessor` "
+            "konstruktorda emas, `IServiceProvider` orqali olinadi. Sababi handler "
+            "`HttpClient` bilan birga keshlanadi, ya'ni uning umri so'rovdan uzun; "
+            "scoped xizmatni konstruktorda ushlab qolish captive dependency bo'lardi. "
+            "Ikkinchisi — sarlavha qo'shishdan oldin o'chiriladi, aks holda zanjirdagi "
+            "qayta urinishda u ikki marta qo'shilib qolishi mumkin.")
+
+    para(d, "`ApiErrorHandler` esa teskari yo'nalishda ishlaydi — javobni tekshiradi va "
+            "HTTP holat kodini domen istisnosiga aylantiradi:")
+
+    code(d, """var response = await base.SendAsync(request, cancellationToken);
+
+if (!response.IsSuccessStatusCode)
+    await HandleErrorResponseAsync(response);   // 401, 403, bo'sh javob, ...
+
+return response;""")
+
+    para(d, "Shuning uchun chaqiruvchi kod `response.StatusCode` ni tekshirmaydi — unga "
+            "yoki natija keladi, yoki tushunarli xabarli istisno. 6-bo'limdagi "
+            "chidamlilik qatlami ham shu zanjirga qo'shiladigan yana bitta handler.")
+
+    note(d, "Mana bu tuzoq menga qimmatga tushdi:",
+         "`ConfigureHttpClient` ichidagi `new Uri(config.BaseUrl)` — lambda. U DI "
+         "ro'yxatga olinganda emas, `HttpClient` birinchi marta yaratilganda "
+         "bajariladi. Natijada `BaseUrl` noto'g'ri bo'lsa servis muammosiz ishga "
+         "tushadi, Swagger ochiladi, health check yashil bo'ladi — va faqat o'sha SDK ni "
+         "inject qiladigan kontroller 500 qaytaradi. Stack trace da esa qaysi SDK "
+         "ayblidan nom-nishon yo'q, shunchaki `UriFormatException`. Production da buning "
+         "odatiy sababi — almashtirilmagan `${sdks_xxxsdk}` o'rin egasi. Tez aniqlash "
+         "uchun ishga tushishda har bir SDK ning `BaseAddress` ini log ga chiqarib "
+         "ko'rish eng qisqa yo'l.")
+
+    h1(d, "9. Xulosa")
 
     bullets(d, [
         "`WebClient` eskirgan — `HttpClient` ishlatiladi.",

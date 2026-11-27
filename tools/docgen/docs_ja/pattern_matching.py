@@ -199,6 +199,92 @@ catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.TooManyReq
         "xavfsizroq.",
     ])
 
+    # ───────────────────────────────────────────
+    h1(d, "7. Amaliyotdan: holat o'tishlari jadvali switch ifodasida")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida hujjatlar hayot davri bo'ylab o'tadi: "
+            "yaratildi, yuborildi, tasdiqlandi, imzolandi, arxivlandi va boshqalar. "
+            "Yigirmadan ortiq holat bor, va har bir holatdan har qanday holatga "
+            "o'tish mumkin emas — masalan \"o'chirilgan\" hujjatni tasdiqlab bo'lmaydi.")
+
+    para(d, "Bu qoidalar bitta sof funksiyada jamlangan va u 2-bo'limdagi `switch` "
+            "ifodasining menga ko'rgan eng aniq ishlatilishi bo'ldi:")
+
+    code(d, """public static bool CanApplyStatus(int currentStatusId, int newStatusId)
+{
+    return newStatusId switch
+    {
+        ARCHIVED       => new[] { ACCEPTED }.Contains(currentStatusId),
+        NOT_ACCEPTED   => new[] { SENT }.Contains(currentStatusId),
+        DELETED        => CanDeleteStatus.Contains(currentStatusId),
+        MODIFIED       => CanModifyStatus.Contains(currentStatusId),
+        ACCEPTED       => CanAcceptStatus.Contains(currentStatusId),
+        CANCELED       => CanCancelStatus.Contains(currentStatusId),
+        APPROVED       => CanApproveStatus.Contains(currentStatusId),
+        SENT           => CanSentStatus.Contains(currentStatusId),
+        SENT_FOR_SIGN  => CanSentForSignStatus.Contains(currentStatusId),
+        SIGNED         => CanSignedStatus.Contains(currentStatusId),
+        REJECTED       => CanRejectStatus.Contains(currentStatusId),
+        SEND_TO_UZASBO => CanSendToUzAsboStatus.Contains(currentStatusId),
+        IN_TESTING     => CanInTestingStatus.Contains(currentStatusId),
+        COMPLETED      => CanCompletedStatus.Contains(currentStatusId),
+        _              => false,
+    };
+}""", caption="Erp.Core/Constants/StatusIdConst.cs, qisqartirilgan")
+
+    para(d, "Ishlatilishi — har bir ishlovchida, holatni o'zgartirishdan oldin:")
+
+    code(d, """if (!StatusIdConst.CanApplyStatus(entity.StatusId, StatusIdConst.APPROVED))
+    throw new WbClientException()
+        .WithVisibility(WbExceptionVisibility.CLIENT_VISIBLE)
+        .WithErrors(new WbFailure { Key = "INVALID_STATUS", ErrorMessage = message });""")
+
+    h2(d, "7.1 Nega bu switch ifodasi, switch bloki emas")
+
+    para(d, "Bu yerda 2-bo'limda sanab o'tgan hamma yutuq bir vaqtda ishlaydi:")
+
+    bullets(d, [
+        "**Hammasi bitta ifoda.** Metod `return newStatusId switch` dan boshlanadi "
+        "va shu bilan tugaydi. Oraliq o'zgaruvchi, `break`, bir nechta `return` yo'q.",
+        "**`_ => false` majburiy.** Kompilyator har bir yo'lda qiymat qaytarilishini "
+        "talab qiladi. Ro'yxatga yangi holat qo'shilsa va uning qatori yozilmasa, "
+        "u jimgina \"ruxsat yo'q\" ga tushadi — bu xavfsiz standart. Teskari tanlov "
+        "(`_ => true`) bir qator unutilganda butun tekshiruvni teshib qo'yardi.",
+        "**Ustunma-ustun o'qiladi.** Yigirma qator bir xil shaklda turganda ro'yxatni "
+        "jadval kabi ko'rish mumkin. `switch` bloki bo'lsa har bir holat uchta qator "
+        "(`case`, `return`, `break`) olardi va bu o'qishni ancha qiyinlashtirardi.",
+    ])
+
+    h2(d, "7.2 Lekin bu pattern matching ning o'zi emas")
+
+    para(d, "Halol aytish kerak: bu yerda hech qanday naqsh yo'q. Holatlar `int` "
+            "konstantalar, shuning uchun bu oddiy constant pattern — 3-bo'limdagi "
+            "eng sodda tur. Type pattern, property pattern yoki `when` sharti "
+            "ishlatilmagan.")
+
+    para(d, "Agar holatlar `enum` bo'lganida ham shakl o'zgarmasdi. Agar hujjat "
+            "turlari sinflar bo'lganida esa type pattern ishlatilardi:")
+
+    code(d, """// Shunday bo'lishi mumkin edi, lekin loyihada bunday emas
+bool canApply = document switch
+{
+    Commission { StatusId: SENT } => newStatus is APPROVED or NOT_ACCEPTED,
+    StudentPayment { Amount: > 0 } => newStatus is ACCEPTED,
+    _ => false,
+};""")
+
+    note(d, "Shundan chiqargan xulosam:",
+         "`switch` ifodasining asosiy foydasi pattern larda emas, **shaklda** — "
+         "u qoidalar ro'yxatini kodda jadval sifatida ko'rsatish imkonini beradi. "
+         "Yigirmadan ortiq qoidani `if-else` zanjiri bilan yozsam, hech kim uni "
+         "oxirigacha o'qib chiqmasdi. Shuning uchun bu mavzuni o'rganishda men "
+         "avval murakkab naqshlarga qiziqqan edim, amalda esa eng ko'p foyda "
+         "beradigan narsa — eng oddiy shakl bo'lib chiqdi.")
+
+    para(d, "6-bo'limda e'tibor beradigan narsalarim sifatida aytganlarimga shuni "
+            "qo'shardim: `_` tarmog'ida qaysi qiymat qaytishini tanlash xavfsizlik "
+            "qarori. Bu yerda u `false`, ya'ni \"bilmasam — ruxsat bermayman\".")
+
     sources(d, [
         ("Pattern matching — C# reference",
          "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/patterns"),

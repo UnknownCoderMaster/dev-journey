@@ -213,6 +213,93 @@ catch (OperationCanceledException)
         "to'liq kutib turadi va ilovaning to'xtashini sekinlashtiradi.",
     ])
 
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: tokenni oxirigacha uzatish qanchalik keng tarqalgani")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida `CancellationToken` ni ataylab sanab "
+            "ko'rdim: u uch mingdan ortiq faylda uchraydi. Amalda har bir metod "
+            "imzosida bor. Bu 4-bo'limdagi \"oxirigacha uzatish\" qoidasining eng "
+            "izchil ko'rinishi va u menga ikki narsani ko'rsatdi.")
+
+    h2(d, "8.1 Zanjir kontrollerdan bazagacha uzilmaydi")
+
+    para(d, "Tizim CQRS bo'yicha qurilgan, shuning uchun zanjir uzun: kontroller → "
+            "MediatR → pipeline behaviour → ishlovchi → EF Core so'rovi. Token "
+            "hammasidan o'tadi:")
+
+    code(d, """// Kontroller — token ASP.NET Core dan keladi
+public async Task<IActionResult> GetListAsync([FromBody] CommissionGetListQuery query)
+    => Ok(await Mediator.Send(query));
+
+// Pipeline behaviour — validatorlarga uzatiladi
+var validationResults = await Task.WhenAll(
+    _validators.Select(v => v.ValidateAsync(context, cancellationToken)));
+
+// Ishlovchi — EF Core ga uzatiladi
+var entity = await dbContext.Commissions
+    .Include(x => x.MemberTables)
+    .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken);
+
+// Hatto SaveChanges ham
+await dbContext.SaveChangesAsync(cancellationToken);""")
+
+    para(d, "Diqqat qiladigan narsa — kontroller tokenni o'zi yozmaydi. MediatR uning "
+            "`Send` metodida tokenni oladi, lekin bu yerda u berilmagan. 5-bo'limda "
+            "aytilganidek `HttpContext.RequestAborted` ni olish uchun uni parametr "
+            "sifatida e'lon qilish kerak. Ya'ni bu zanjirda eng birinchi bo'g'in "
+            "yetishmaydi: kontroller token olmagani uchun MediatR ga `default` "
+            "ketadi va mijoz ulanishni uzsa, so'rov baribir oxirigacha bajariladi.")
+
+    note(d, "Bu meni qiziqtirgan narsa bo'ldi:",
+         "Uch ming joyda token to'g'ri uzatilgan, lekin zanjirning boshida uzilgan. "
+         "Natijada butun bu mehnat faqat bitta holatda ish beradi — ichki bekor "
+         "qilishlarda, masalan `Task.WhenAll` dagi birinchi xatodan keyin. Mijozning "
+         "ketishi esa sezilmaydi. Bundan chiqardim: oxirigacha uzatish zanjirning "
+         "**eng boshidan** boshlanmasa, qolgan hammasi bekorga ketadi. Kontrollerga "
+         "`CancellationToken cancellationToken` parametrini qo'shish — bitta qator, "
+         "lekin uni qo'shmaslik butun zanjirni ma'nosiz qiladi.")
+
+    h2(d, "8.2 Istisno filtri bilan bekor qilishni ajratish")
+
+    para(d, "6-bo'limda `OperationCanceledException` bilan ishlash haqida gapirgandim. "
+            "Shu tizimda juda yoqqan bir misolni ko'rdim. Bosh sahifadagi statistika "
+            "paneli o'n ikkita og'ir `COUNT` so'rovidan iborat. Agar bittasi yiqilsa, "
+            "butun panel 500 qaytarishi kerak emas — o'sha raqam o'rnida chiziqcha "
+            "chiqsin:")
+
+    code(d, """async Task<int?> Count(Func<Task<int>> count)
+{
+    try
+    {
+        return await count();
+    }
+    catch (Exception) when (!cancellationToken.IsCancellationRequested)
+    {
+        return null;
+    }
+}""", caption="GetLoginStatisticsQueryHandler")
+
+    para(d, "Shart ichidagi `when (!cancellationToken.IsCancellationRequested)` — "
+            "mana shu qismi muhim. U bo'lmasa `catch (Exception)` hamma narsani, "
+            "shu jumladan bekor qilish istisnosini ham yutib yuborardi. Natijada "
+            "mijoz allaqachon ketgan bo'lsa ham, kod qolgan o'n bir so'rovni "
+            "bajarib, natijani keshga yozib qo'yardi.")
+
+    bullets(d, [
+        "Filtr bilan: mijoz uzsa, `OperationCanceledException` `catch` ga "
+        "**tushmaydi** va yuqoriga chiqadi — qolgan so'rovlar bajarilmaydi.",
+        "Filtrsiz: bekor qilish oddiy xato bilan bir xil qabul qilinardi va "
+        "6-bo'limda aytilgan \"bekor qilishni xatodan farqlash\" qoidasi buzilardi.",
+        "`Exception` ni ushlash odatda yomon amaliyot, lekin bu yerda maqsad aniq: "
+        "bitta ko'rsatkich butun panelni yiqitmasligi kerak. Filtr esa bu keng "
+        "ushlashni xavfsiz qiladi.",
+    ])
+
+    para(d, "7-bo'limda nozik joylar sifatida aytganlarimga shuni qo'shardim: "
+            "`catch (Exception)` yozilgan har bir joyda \"bu bekor qilishni ham "
+            "yutib yubormaydimi\" degan savolni berish kerak. Javob \"ha\" bo'lsa, "
+            "istisno filtri qo'shiladi.")
+
     sources(d, [
         ("CancellationToken Struct",
          "https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtoken"),

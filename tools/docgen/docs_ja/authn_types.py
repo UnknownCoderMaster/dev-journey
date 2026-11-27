@@ -204,6 +204,104 @@ await HttpContext.SignInAsync(new ClaimsPrincipal(identity));""")
          "JWT bilan ishlashi mumkin — `[Authorize(AuthenticationSchemes = ...)]` "
          "orqali qaysi biri ishlashi aytiladi.")
 
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: bitta tizimda ikki mustaqil autentifikatsiya")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida 7-bo'limdagi jadvaldan bitta usul "
+            "tanlanmagan — ikkita butunlay mustaqil autentifikatsiya tizimi yonma-yon "
+            "ishlaydi. Buni birinchi ko'rganimda ortiqcha murakkablik deb o'yladim, "
+            "sababini tushungach esa fikrim o'zgardi.")
+
+    h2(d, "8.1 Nega ikkita")
+
+    para(d, "Tizimda ikki xil foydalanuvchi bor va ularning ehtiyojlari to'liq boshqa:")
+
+    table(d, ["", "Xodimlar", "Tashqi mijozlar"],
+          [["Kim", "Muassasa xodimlari", "Fuqarolar, yuridik shaxslar"],
+           ["Qayerdan", "Tashkilot ichidan", "Internetdan, mobil ilovadan"],
+           ["Kim yaratadi", "Administrator", "O'zini o'zi ro'yxatdan o'tkazadi"],
+           ["Shaxsni kim tasdiqlaydi", "Tashkilot", "Davlat identifikatsiya tizimi"],
+           ["Yechim", "Keycloak (OIDC)", "O'z IdP si + OneID"]],
+          widths=[4.0, 5.5, 6.0])
+
+    para(d, "Ya'ni farq texnik emas, tashkiliy. Xodimni ishga olish va uning huquqini "
+            "belgilash — administratorning ishi. Fuqaro esa o'zini o'zi ro'yxatdan "
+            "o'tkazadi va uning shaxsini davlat tizimi tasdiqlaydi. Bitta "
+            "autentifikatsiya oqimiga ikkisini joylashtirish — ikki xil biznes "
+            "jarayonini bitta kodga tiqishtirish bo'lardi.")
+
+    h2(d, "8.2 Xodimlar — 6-bo'limdagi OIDC")
+
+    para(d, "Bu yo'l standart: Keycloak identifikatsiya provayderi sifatida ishlaydi, "
+            "har bir servis o'z mijozini unda ro'yxatdan o'tkazadi, token esa JWT "
+            "bearer sifatida tekshiriladi. 4-bo'limda aytilgan hamma narsa shu yerda "
+            "ishlaydi.")
+
+    h2(d, "8.3 Tashqi mijozlar — o'z IdP si va RS256")
+
+    para(d, "Ikkinchi oqimda Keycloak umuman qatnashmaydi. Bitta servis o'zi "
+            "identifikatsiya provayderi bo'lib ishlaydi va RS256 bilan imzolangan "
+            "token chiqaradi. Shaxsni tasdiqlash esa OneID — davlat tizimi — orqali "
+            "bajariladi.")
+
+    para(d, "3-bo'limdagi cookie va 4-bo'limdagi token yondashuvlari bu yerda "
+            "aralashgan. Token cookie da ham uzatilishi mumkin:")
+
+    code(d, """OnMessageReceived = ctx =>
+{
+    if (string.IsNullOrEmpty(ctx.Token))
+    {
+        var cookie = ctx.Request.Cookies[AuthCookieNames.PersonAccessToken];
+        if (!string.IsNullOrEmpty(cookie))
+            ctx.Token = cookie;
+    }
+    return Task.CompletedTask;
+}""", caption="PersonAuthExtensions.cs")
+
+    para(d, "Mantiq oddiy: mobil ilova tokenni `Authorization` sarlavhasida yuboradi, "
+            "veb interfeys esa `HttpOnly` cookie da. Server ikkisini ham qabul qiladi. "
+            "Bu 3-bo'limda aytilgan cookie ning XSS dan himoyasini brauzer uchun "
+            "saqlaydi, mobil mijoz uchun esa 4-bo'limdagi oddiy sarlavha qoladi.")
+
+    h2(d, "8.4 Tokendan keyingi tekshiruv")
+
+    para(d, "Imzo tasdiqlangandan keyin yana ikki tekshiruv bajariladi:")
+
+    code(d, """OnTokenValidated = async ctx =>
+{
+    var userType = ctx.Principal?.FindFirst(PersonClaims.UserType)?.Value;
+    if (!string.Equals(userType, PersonClaims.UserTypePerson, StringComparison.OrdinalIgnoreCase))
+    {
+        ctx.Fail("user_type is not person");
+        return;
+    }
+
+    // Logout/revoke qilingan sessiya bo'lsa — access token amal qilmasin.
+    await TokenRevocationCheck.EnforceAsync(
+        ctx, PersonAuthRedisKeys.RevokedPrefix, JwtRegisteredClaimNames.Jti);
+}""")
+
+    bullets(d, [
+        "**Birinchisi** — tokendagi foydalanuvchi turi kutilganiga mos kelishini "
+        "tekshiradi. Ya'ni xodim tokeni bilan fuqarolar endpoint iga kirib bo'lmaydi, "
+        "garchi ikkala token ham texnik jihatdan to'g'ri bo'lsa.",
+        "**Ikkinchisi** — 4-bo'limda aytilgan tokenni bekor qilib bo'lmaslik "
+        "muammosini yumshatadi. Chiqish qilingan sessiya identifikatori Redis ga "
+        "yoziladi va har so'rovda tekshiriladi.",
+    ])
+
+    note(d, "Bu yerda meni o'ylantirgan qaror:",
+         "Redis yo'q yoki xato bersa, tekshiruv so'rovni **o'tkazib yuboradi** va "
+         "faqat ogohlantirish log yozadi. Men avval buni xato deb o'yladim — "
+         "xavfsizlik tekshiruvi yiqilganda rad etish kerak emasmi? Keyin tushundim: "
+         "agar rad etilsa, Redis o'chganda hech kim tizimga kira olmay qolardi. "
+         "Qora ro'yxat esa qo'shimcha qatlam, uning vazifasi bazadagi haqiqiy "
+         "bekor qilishni **tezroq** kuchga kiritish. Ya'ni ongli murosa: Redis "
+         "tushgan oynada bekor qilingan token muddati tugaguncha ishlab ketishi "
+         "mumkin, lekin tizim ishlab turadi. Shundan o'rgandim: xavfsizlik "
+         "tekshiruvining yiqilishida nima bo'lishini oldindan hal qilib qo'yish "
+         "kerak, va javob har doim \"rad etish\" bo'lavermaydi.")
+
     sources(d, [
         ("Overview of ASP.NET Core authentication",
          "https://learn.microsoft.com/en-us/aspnet/core/security/authentication/"),

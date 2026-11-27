@@ -222,7 +222,98 @@ await _db.SaveChangesAsync(ct);""")
          "\"Hamma shunday qilyapti\" degani yetarli asos emas.")
 
     # ───────────────────────────────────────────
-    h1(d, "8. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: tranzaksiya egasi kim")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida yigirmaga yaqin mikroservis bor va har birida "
+            "CQRS bo'yicha MediatR ishlovchilari. Muammo shu yerdan chiqdi: ishlovchilar "
+            "bir-birini chaqiradi. Masalan komissiyani tasdiqlash ishlovchisi o'z ichida "
+            "o'zgarish jurnalini yozadigan boshqa komandani yuboradi.")
+
+    para(d, "Agar har bir ishlovchi `BeginTransactionAsync()` chaqirsa, ichki ishlovchi "
+            "tashqi tranzaksiya ustiga ikkinchisini ochishga urinadi va EF Core xato "
+            "beradi. Agar hech biri chaqirmasa — atomiklik yo'qoladi.")
+
+    h2(d, "8.1 Yechim — egalik bayrog'i")
+
+    para(d, "Loyihada bu `DatabaseFacade` ustidagi kichik extension metod bilan hal "
+            "qilingan. U mavjud tranzaksiyani qaytaradi va ikkinchi qiymat bilan "
+            "\"buni kim ochdi\" degan savolga javob beradi:")
+
+    code(d, """public static async Task<(IDbContextTransaction Transaction, bool IsOwner)>
+    BeginTransactionIfNotExistsAsync(
+        this DatabaseFacade database,
+        CancellationToken cancellationToken = default)
+{
+    var currentTransaction = database.CurrentTransaction;
+
+    if (currentTransaction != null)
+        return (currentTransaction, false); // Biz owner emasmiz
+
+    var newTransaction = await database.BeginTransactionAsync(cancellationToken);
+    return (newTransaction, true); // Biz ochdik = biz owner
+}""", caption="DbContextTransactionExtensions.cs")
+
+    para(d, "Ishlovchi tomonida foydalanish shakli bir xil. `Commit` va `Rollback` "
+            "faqat egasi tomonidan chaqiriladi:")
+
+    code(d, """var (transaction, isOwner) = await dbContext.Database
+    .BeginTransactionIfNotExistsAsync(cancellationToken);
+
+try
+{
+    // ... hujjatni o'qish, holatni tekshirish, o'zgartirish
+    entity.StatusId = StatusIdConst.APPROVED;
+    await dbContext.SaveChangesAsync(cancellationToken);
+
+    // Ichki komanda — o'z navbatida shu metodni chaqiradi va isOwner=false oladi
+    await sender.Send(new ComDocumentChangeLogCreateCommand<long, CommissionDto>
+    {
+        GetByIdQuery = new CommissionGetByIdQuery { Id = entity.Id },
+        Message = entity.Message
+    }, cancellationToken);
+
+    if (isOwner)
+        await transaction.CommitAsync(cancellationToken);
+
+    return true;
+}
+catch
+{
+    // Faqat biz owner bo'lsak — rollback qilamiz
+    if (isOwner)
+        await transaction.RollbackAsync(cancellationToken);
+
+    throw;
+}""", caption="CommissionApproveCommandHandler, soddalashtirilgan")
+
+    h2(d, "8.2 Nega bu Unit of Work ning o'zi")
+
+    para(d, "Bu kod aslida 3-bo'limda aytilgan \"bir nechta amalni bitta chegara ichiga "
+            "olish\" vazifasini bajaradi, lekin alohida `IUnitOfWork` interfeysi "
+            "yaratilmagan. Chegara `DbContext` ning o'zida, egalik esa chaqiruvchining "
+            "mas'uliyatida qoldirilgan.")
+
+    bullets(d, [
+        "Ichki ishlovchi o'zini tashqi chegaraga **qo'shadi**, o'ziga yangisini "
+        "ochmaydi. Shuning uchun u mustaqil ham, boshqa ishlovchi ichida ham ishlaydi.",
+        "`SaveChangesAsync()` bir nechta marta chaqirilishi mumkin — har biri o'z "
+        "buyruqlar to'plamini yuboradi, lekin hammasi bitta tranzaksiyada qoladi. "
+        "Ya'ni 2-bo'limdagi \"`SaveChanges` o'zi bitta Unit of Work\" qoidasi bu yerda "
+        "yetarli emas: chegara undan kattaroq.",
+        "`catch` bloki xatoni **qayta tashlaydi**. Agar tashlanmasa, tashqi ishlovchi "
+        "ichkisi yiqilganini bilmay commit qilib qo'yardi.",
+    ])
+
+    note(d, "Bu yondashuvning zaif joyi:",
+         "Egalikni `try/finally` emas, `try/catch` qo'riqlaydi. Agar ishlovchi ichida "
+         "hech qanday xato bo'lmasa, lekin egasi bo'lgan kod `return` dan oldin commit "
+         "qilishni unutsa, tranzaksiya ochiq qolib ketadi va kontekst dispose bo'lganda "
+         "jim rollback bo'ladi. Ya'ni bu naqsh dasturchining e'tiboriga tayanadi. "
+         "To'g'risi — buni MediatR pipeline behaviour ga ko'chirish, xuddi validatsiya "
+         "qilingani kabi. Loyihada hozircha har bir ishlovchida qo'lda yozilgan.")
+
+    h1(d, "9. Xulosa")
 
     bullets(d, [
         "Unit of Work o'zgarishlarni yig'ib, ularni bitta tranzaksiyada "

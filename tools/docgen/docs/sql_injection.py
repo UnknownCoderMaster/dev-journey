@@ -253,7 +253,81 @@ END;
 $$ LANGUAGE plpgsql;""")
 
     # ───────────────────────────────────────────
-    h1(d, "8. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: xom SQL ilova kodida yo'q")
+
+    para(d, "Ish joyimdagi MAD ERP tizimini shu mavzu bo'yicha ataylab tekshirib "
+            "chiqdim. Natija meni o'ylantirdi: `FromSql`, `FromSqlRaw` va "
+            "`ExecuteSqlRaw` butun C# kodbazada **birorta ham** uchramaydi.")
+
+    para(d, "Bu tasodif emas. 4-bo'limda EF Core da xom SQL ni xavfsiz yozish usullari "
+            "ko'rsatilgan — interpolyatsiyali `FromSql` parametrlarni o'zi quradi, "
+            "`FromSqlRaw` esa qo'lda e'tibor talab qiladi. Loyihada esa uchinchi yo'l "
+            "tanlangan: xom SQL ilova kodiga umuman kirmaydi.")
+
+    h2(d, "8.1 Unda xom SQL qayerda")
+
+    para(d, "Migratsiyalarda. Bazaning butun sxemasi mingdan ortiq raqamlangan SQL "
+            "faylida yozilgan va tartib bo'yicha bajariladi:")
+
+    code(d, """scripts/executed/1120. COM yangi status qo'shish.sql
+scripts/executed/1121. STD info_school_year indeks.sql""")
+
+    para(d, "Bu fayllarni dasturchi yozadi, kod ko'rikdan o'tadi va bir marta "
+            "bajariladi. Ularda foydalanuvchi kiritgan ma'lumot yo'q — ya'ni "
+            "injeksiya uchun kirish nuqtasining o'zi mavjud emas. 1-bo'limdagi "
+            "hujum modeli bu yerda qo'llanilmaydi.")
+
+    h2(d, "8.2 Ommaviy amallar uchun nima ishlatiladi")
+
+    para(d, "Xom SQL ko'pincha unumdorlik uchun kerak bo'ladi — minglab qatorni bir "
+            "`UPDATE` bilan o'zgartirish uchun. EF Core 7 dan beri bunga "
+            "parametrlangan muqobil bor va loyihada yetmishdan ortiq joyda aynan shu "
+            "ishlatiladi:")
+
+    code(d, """await dbContext.Applications
+    .Where(x => x.StatusId == StatusIdConst.SENT && x.OrganizationId == orgId)
+    .ExecuteUpdateAsync(s => s.SetProperty(x => x.StatusId, StatusIdConst.ARCHIVED),
+                        cancellationToken);""")
+
+    para(d, "Bu LINQ ifodasi, ya'ni `orgId` va holat qiymatlari parametr sifatida "
+            "uzatiladi. Tezlik xom SQL darajasida, lekin satr yig'ish umuman yo'q. "
+            "Men buni \"parametrlangan so'rov\" tamoyilining eng yaxshi ko'rinishi "
+            "deb bilaman: xavfsizlikni tanlash kerak bo'lmaydi, u standart holda "
+            "shunday.")
+
+    note(d, "Bu yondashuvning cheklovi ham bor:",
+         "5-bo'limda parametr yordam bermaydigan joylar aytilgan — dinamik tartiblash, "
+         "jadval nomi, murakkab agregatsiya. Bizda shunday ehtiyoj paydo bo'lganda "
+         "u LINQ bilan hal qilinadi yoki ko'rinish (`view`) sifatida bazada "
+         "tayyorlanadi. Natijada ba'zi so'rovlar xom SQL da ancha sodda yozilardi. "
+         "Ya'ni bu qaror unumdorlik va o'qiluvchanlikni biroz qurbon qiladi — buning "
+         "evaziga esa butun bir hujum sinfini imkonsiz qiladi. Menimcha bu arzon narx.")
+
+    h2(d, "8.3 Shunga qaramay nima qolgan")
+
+    para(d, "Injeksiya yo'q degani xavfsizlik muammosi yo'q degani emas. Shu "
+            "kodbazada men ko'rgan haqiqiy nuqsonlar boshqa turda bo'ldi:")
+
+    bullets(d, [
+        "**Kirish nazorati.** Har bir so'rov `organization_id` bo'yicha "
+        "filtrlanishi kerak, lekin bu qoida kodda emas, kelishuvda. Unutilgan "
+        "joyda boshqa tashkilotning ma'lumoti ochiladi.",
+        "**Boshqa kontekstdagi injeksiya.** 5-bo'limda aytilgan \"har bir kontekst "
+        "o'z qoidasiga ega\" fikri amalda isbotlandi: fayl nomi HTTP "
+        "`Content-Disposition` sarlavhasiga satr interpolatsiyasi bilan qo'yilgan edi "
+        "va o'zbekcha apostroflar Kestrel ni yiqitgan.",
+        "**Konfiguratsiyadagi xatolar.** Almashtirilmagan o'rin egalari, noto'g'ri "
+        "bucket nomlari. Bular 7-bo'limdagi tekshiruv ro'yxatiga kirmaydi, lekin "
+        "amalda ko'proq nosozlik keltirgan.",
+    ])
+
+    para(d, "Shuning uchun o'zim uchun chiqargan xulosam shu: SQL injeksiyasi — "
+            "o'rganilishi shart bo'lgan, lekin zamonaviy ORM ishlatilgan loyihada "
+            "amalda eng kam uchraydigan muammo. E'tiborni unga qaratgandan ko'ra, "
+            "kirish nazorati va sozlanishga qaratish foydaliroq.")
+
+    h1(d, "9. Xulosa")
 
     bullets(d, [
         "SQL injection — foydalanuvchi matnini so'rov buyrug'iga aylantirish.",

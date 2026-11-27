@@ -218,6 +218,122 @@ public Task<IActionResult> List(CancellationToken ct) => ...;""")
          "git tarixiga tushgan kalitni avtomatik skanerlar bir necha "
          "daqiqada topadi.")
 
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: servislararo kalit va uchta qaror")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida API key faqat bitta maqsadda ishlatiladi: "
+            "servislararo chaqiruvlarni himoyalash. Foydalanuvchilar JWT bilan "
+            "autentifikatsiya qilinadi, lekin ba'zi endpoint lar faqat boshqa servis "
+            "tomonidan chaqirilishi kerak.")
+
+    para(d, "Misol — media fayllarni qayta kodlash uchun navbatga qo'yadigan endpoint. "
+            "U butun kutubxonani navbatga joylaydi, ya'ni og'ir va xavfli amal. "
+            "Himoyasi 5-bo'limdagi sxemadan oddiyroq — `IAuthorizationFilter`:")
+
+    code(d, """[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
+public sealed class InternalApiKeyAttribute : Attribute, IAuthorizationFilter
+{
+    private const string HeaderName = "X-Internal-Api-Key";
+
+    public void OnAuthorization(AuthorizationFilterContext context)
+    {
+        var expected = AppSettings.Instance?.InternalApi?.Key;
+
+        if (string.IsNullOrWhiteSpace(expected))
+        {
+            context.Result = new ObjectResult(new { error = "internal_api_key_not_configured" })
+            {
+                StatusCode = StatusCodes.Status503ServiceUnavailable,
+            };
+
+            return;
+        }
+
+        var provided = context.HttpContext.Request.Headers[HeaderName].ToString();
+
+        // Vaqt bo'yicha barqaror taqqoslash: oddiy `==` kalitni belgima-belgi
+        // topishga imkon beradigan sizib chiqish kanali.
+        if (string.IsNullOrEmpty(provided) || !FixedTimeEquals(provided, expected))
+            context.Result = new UnauthorizedResult();
+    }
+
+    private static bool FixedTimeEquals(string provided, string expected)
+    {
+        var providedBytes = Encoding.UTF8.GetBytes(provided);
+        var expectedBytes = Encoding.UTF8.GetBytes(expected);
+
+        return providedBytes.Length == expectedBytes.Length
+               && CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes);
+    }
+}""", caption="InternalApiKeyAttribute.cs")
+
+    para(d, "Ishlatilishi — kontroller ustiga bitta atribut:")
+
+    code(d, """[ApiController]
+[InternalApiKey]
+public class BackfillController : ControllerBase""")
+
+    h2(d, "8.1 Sozlanmagan bo'lsa — 503, 200 emas")
+
+    para(d, "Mana bu qaror menga eng muhim tuyuldi. Agar kalit konfiguratsiyada "
+            "bo'lmasa, filtr `503 Service Unavailable` qaytaradi — endpoint "
+            "**ochiq qolmaydi**.")
+
+    para(d, "Buni teskari yozish juda oson: \"kalit sozlanmagan bo'lsa tekshirmaymiz\". "
+            "Lokal ishlab chiqishda qulay bo'lardi. Lekin natijasi shu bo'lardi: "
+            "Production da sozlamani unutib qo'yish endpoint ni butun dunyoga ochib "
+            "qo'yardi, va buni hech narsa bildirmasdi. 7-bo'limdagi talablar "
+            "ro'yxatiga men shu bandni qo'shardim: **himoyaning yo'qligi xato "
+            "bo'lishi kerak, standart holat emas.**")
+
+    h2(d, "8.2 Nega kalit nusxalangan")
+
+    para(d, "Kodda izoh bor: bu filtr boshqa servisdagi bir nomli filtrning nusxasi, "
+            "lekin ataylab alohida kalitni ishlatadi.")
+
+    para(d, "Sababi — asl filtr OneID autentifikatsiya oqimining kalitiga bog'langan. "
+            "Agar qayta kodlash endpoint i o'sha sirni ishlatsa, ikki mutlaqo turli "
+            "tizim bitta kalitni bo'lishib olardi: birini almashtirish ikkinchisini "
+            "yiqitardi.")
+
+    note(d, "Bu 4-bo'limdagi mavzuning amaliy davomi:",
+         "Kalitni qanday saqlash haqida ko'p gapiriladi, lekin \"bitta kalit qancha "
+         "joyda ishlatilishi kerak\" savoli kam muhokama qilinadi. Men bu kodni "
+         "ko'rgach tushundim: kalitni almashtirish imkoniyati uning qiymatidan kam "
+         "muhim emas. Agar bitta kalit uch xizmatda ishlatilsa, uni almashtirish "
+         "uch xizmatni bir vaqtda to'xtatishni talab qiladi — va shuning uchun hech "
+         "kim almashtirmaydi. Kod takrorlanishi odatda yomon, lekin bu yerda u "
+         "ongli narx.")
+
+    h2(d, "8.3 Kalitni avtomatik qo'shish")
+
+    para(d, "Chaqiruvchi tomonda kalitni har safar qo'lda yozish kerak emas. U "
+            "`DelegatingHandler` orqali qo'shiladi, lekin faqat kerakli holatda:")
+
+    code(d, """protected override Task<HttpResponseMessage> SendAsync(
+    HttpRequestMessage request, CancellationToken cancellationToken)
+{
+    var user = _serviceProvider.GetService<IHttpContextAccessor>()?.HttpContext?.User;
+
+    if (user?.Identity?.IsAuthenticated == true
+        && string.Equals(user.FindFirst(PersonClaims.UserType)?.Value,
+                         PersonClaims.UserTypePerson, StringComparison.Ordinal))
+    {
+        request.Headers.Remove(ApplicationHeaderConst.InternalServiceKey);
+        request.Headers.TryAddWithoutValidation(
+            ApplicationHeaderConst.InternalServiceKey, _serviceKey);
+    }
+
+    return base.SendAsync(request, cancellationToken);
+}""", caption="ServiceKeyHeaderHandler")
+
+    para(d, "Shart ichidagi tekshiruv — kalit faqat ma'lum turdagi foydalanuvchining "
+            "so'rovlarida qo'shiladi. Ya'ni kalit hamma chiquvchi so'rovga "
+            "yopishtirilmaydi, faqat kerak bo'lgan oqimda. 2-bo'limda kalitni "
+            "sarlavhada uzatish haqida gapirgandim; bu yerda yana bir qoida "
+            "qo'shiladi: kalitni kerak bo'lmagan joyga yuborish — uni oshkor qilish "
+            "ehtimolini bekorga oshirish.")
+
     sources(d, [
         ("Authentication handler in ASP.NET Core",
          "https://learn.microsoft.com/en-us/aspnet/core/security/authentication/"),

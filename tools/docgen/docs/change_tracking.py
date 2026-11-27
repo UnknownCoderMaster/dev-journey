@@ -199,7 +199,133 @@ Console.WriteLine(db.ChangeTracker.DebugView.LongView);""")
          "bo'lib chiqadi.")
 
     # ───────────────────────────────────────────
-    h1(d, "6. Xulosa")
+    h1(d, "6. Amaliyotdan: ChangeTracker orqali yopilgan davrni qo'riqlash")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida hujjatlarning deyarli hammasi o'quv yiliga "
+            "bog'langan. Yil yakunlanib hisobotlar topshirilgandan keyin u \"yopiladi\" — "
+            "`std.info_school_year` jadvalidagi `is_process_allowed` ustuni `false` ga "
+            "o'tadi. Shundan keyin o'sha yilga tegishli biror hujjatni qo'shish, "
+            "o'zgartirish yoki o'chirish mumkin emas, aks holda allaqachon topshirilgan "
+            "hisobot bilan baza bir-biriga mos kelmay qoladi.")
+
+    para(d, "Muammo shundaki, bunday hujjat turlari yigirmadan ortiq va ular turli "
+            "xizmatlarga tarqalgan: `Commission`, `StudentPayment`, `SchoolDiplom`, "
+            "`MusicTeacherSalary`, `StudentTransferApplication` va boshqalar. Tekshiruvni "
+            "har bir komanda ishlovchisiga qo'lda yozish — bir xil shartni yigirma joyda "
+            "takrorlash va ertaga qo'shiladigan yangi hujjatda uni unutish degani.")
+
+    h2(d, "6.1 Yechim — tekshiruvni SaveChanges ga ko'chirish")
+
+    para(d, "Hujjatning o'zi faqat bitta atribut bilan belgilanadi. Atributda qaysi "
+            "property o'quv yili id sini saqlashi ko'rsatiladi:")
+
+    code(d, """[Table("doc_commission", Schema = "com")]
+[SchoolYearProcessGuard(nameof(SchoolYearId))]
+public class Commission : BaseEntity<long>, IAuditTrackEntity
+{
+    [Column("school_year_id")]
+    public int SchoolYearId { get; set; }
+    // ...
+}""", caption="Hujjat turi o'zini qo'riqlanadigan deb e'lon qiladi")
+
+    para(d, "Qolgan hamma ish `ApplicationDbContext` ichida, `SaveChanges` ustidagi "
+            "override da bajariladi. U `ChangeTracker` ni aylanib, shu amalda ta'sirga "
+            "tushadigan o'quv yillari to'plamini yig'adi:")
+
+    code(d, """private HashSet<int> CollectGuardedSchoolYearIds()
+{
+    var schoolYearIds = new HashSet<int>();
+
+    foreach (var entry in ChangeTracker.Entries())
+    {
+        if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
+            continue;
+
+        // Metadata.ClrType — proxy emas, haqiqiy entity turi.
+        var propertyName = SchoolYearGuardProperties.GetOrAdd(
+            entry.Metadata.ClrType,
+            clrType => clrType.GetCustomAttribute<SchoolYearProcessGuardAttribute>()
+                ?.SchoolYearPropertyName ?? string.Empty);
+
+        if (propertyName.Length == 0)
+            continue;
+
+        var property = entry.Property(propertyName);
+
+        if (property.CurrentValue is int currentSchoolYearId && currentSchoolYearId > 0)
+            schoolYearIds.Add(currentSchoolYearId);
+
+        // Yil o'zgartirilgan bo'lsa eskisi ham tekshiriladi — aks holda hujjatni
+        // yopiq yildan "olib chiqib" tahrirlash yo'li ochiq qolardi.
+        if (entry.State == EntityState.Modified && property.IsModified
+            && property.OriginalValue is int originalSchoolYearId && originalSchoolYearId > 0)
+            schoolYearIds.Add(originalSchoolYearId);
+    }
+
+    return schoolYearIds;
+}""", caption="ApplicationDbContext, SchoolYearProcessGuard bo'limidan")
+
+    para(d, "Agar to'plam bo'sh bo'lmasa, yopilgan yillar ro'yxati bir marta o'qiladi va "
+            "mos tushgani bo'lsa mijozga ko'rinadigan xato tashlanadi:")
+
+    code(d, """public override async Task<int> SaveChangesAsync(
+    bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+{
+    var schoolYearIds = CollectGuardedSchoolYearIds();
+
+    if (schoolYearIds.Count > 0)
+    {
+        _blockedSchoolYears ??= await SchoolYears.AsNoTracking()
+            .Where(x => !x.IsProcessAllowed)
+            .ToDictionaryAsync(x => x.Id, x => x.FullName, cancellationToken);
+
+        EnsureSchoolYearProcessAllowed(schoolYearIds);
+    }
+
+    return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+}""")
+
+    h2(d, "6.2 Bu yerda change tracking ning qaysi xususiyati ishlatilgan")
+
+    bullets(d, [
+        "**`entry.State` bo'yicha filtr.** Kontekst yuzlab entity ni kuzatayotgan bo'lishi "
+        "mumkin, lekin ularning ko'pi `Unchanged`. Faqat uch holat tekshiriladi, qolgani "
+        "darhol tashlab ketiladi.",
+        "**`entry.Metadata.ClrType`.** Obyektning `GetType()` i lazy loading proxy si "
+        "bo'lib chiqishi mumkin — unda atribut topilmaydi. Metadata esa EF Core ning "
+        "modelidagi haqiqiy turni beradi.",
+        "**`property.OriginalValue`.** Eng muhim nuqta. Agar faqat joriy qiymat "
+        "tekshirilsa, hujjatni yopiq yildan ochiq yilga ko'chirib, keyin xohlagancha "
+        "tahrirlash yo'li ochiq qolardi. Dastlabki qiymatlar nusxasi — ya'ni 1-bo'limda "
+        "aytilgan o'sha \"sehr\" ning asosi — shu teshikni yopadi.",
+        "**Tekshiruv `base.SaveChanges` dan oldin.** Shuning uchun bazaga hech narsa "
+        "tushmaydi va yuqorida tranzaksiya bor-yo'qligi ahamiyatsiz bo'ladi.",
+    ])
+
+    h2(d, "6.3 Narxi va chetlab o'tish yo'llari")
+
+    para(d, "Reflection har bir entity uchun chaqirilsa qimmat bo'lardi. Shuning uchun "
+            "natija statik lug'atda keshlanadi, va atributi **yo'q** turlar ham bo'sh satr "
+            "bilan keshlanadi — ya'ni har bir tur uchun reflection umumiy hisobda bir marta "
+            "ishlaydi:")
+
+    code(d, """private static readonly ConcurrentDictionary<Type, string> SchoolYearGuardProperties = new();""")
+
+    para(d, "Yopilgan yillar lug'ati esa `??=` bilan faqat zarur bo'lganda o'qiladi. "
+            "Kontekst scoped bo'lgani uchun bu bitta so'rov davomida ko'pi bilan bitta "
+            "qo'shimcha `SELECT`. Ochiq yillar umuman yuklanmaydi — odatda yopilganlari "
+            "bir necha qator.")
+
+    note(d, "Mana bu cheklovni bilib qo'yish kerak:",
+         "Bu himoya faqat EF Core orqali o'tgan yozuvni ko'radi. `ExecuteUpdate()`, "
+         "`ExecuteDelete()` va xom SQL `ChangeTracker` ni butunlay chetlab o'tadi, "
+         "shuning uchun ularda guard ishlamaydi. Bu ongli murosa: qo'riqlanadigan "
+         "hujjatlar odatda bitta-bitta tahrirlanadi, ommaviy amallar esa ularga "
+         "qo'llanilmaydi. Lekin ertaga kimdir shu jadvalga `ExecuteDelete()` yozsa, "
+         "tekshiruv jimgina chetlab o'tiladi — shuni yodda tutish kerak.")
+
+    # ───────────────────────────────────────────
+    h1(d, "7. Xulosa")
 
     bullets(d, [
         "Change tracking tufayli `Update()` ni qo'lda chaqirish shart emas — kontekst "

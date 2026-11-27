@@ -209,6 +209,102 @@ Assert.Equal(12650m, rate);""")
             "Handler esa abstrakt klass, shuning uchun uni meros olish "
             "oson.")
 
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: Refit va oltita handler")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida yigirmaga yaqin servis bir-biriga HTTP "
+            "orqali murojaat qiladi. `HttpClient` hech qayerda qo'lda yozilmaydi — "
+            "har bir servis o'z API sini Refit interfeysi sifatida e'lon qiladi, "
+            "iste'molchi esa shu interfeysni inject qiladi.")
+
+    para(d, "Refit 4-bo'limdagi tipik mijoz g'oyasini oxirigacha olib boradi: "
+            "interfeys e'lon qilinadi, amalga oshirishni kutubxona generatsiya "
+            "qiladi. Ro'yxatga olish esa bitta umumiy metodda:")
+
+    code(d, """public static void RegisterApiClient<T>(this IServiceCollection services,
+                                        SdkConfig config,
+                                        RefitSettings refitSettings = null)
+    where T : class
+{
+    var builder = services.AddRefitClient<T>(refitSettings)
+        .ConfigureHttpClient(c => c.BaseAddress = new Uri(config.BaseUrl))
+        .AddHttpMessageHandler<LanguageHeaderHandler>()
+        .AddHttpMessageHandler<UserHeaderHandler>()
+        .AddHttpMessageHandler<PersonHeaderHandler>()
+        .AddHttpMessageHandler<LegalHeaderHandler>()
+        .AddHttpMessageHandler<ApiErrorHandler>()
+        .AddHttpMessageHandler<AppHeaderHandler>();
+
+    if (!string.IsNullOrWhiteSpace(config.ServiceKey))
+        builder.AddHttpMessageHandler(sp => new ServiceKeyHeaderHandler(sp, config.ServiceKey));
+}""", caption="Erp.Core.Sdk/Extensions/ServiceCollectionExtensions.cs")
+
+    para(d, "`AddRefitClient` ichida `IHttpClientFactory` ishlaydi, ya'ni 2-bo'limda "
+            "aytilgan socket va DNS muammolari avtomatik hal bo'ladi.")
+
+    h2(d, "8.1 Oltita handler nima qiladi")
+
+    para(d, "6-bo'limda `DelegatingHandler` haqida gapirgandim. Bu yerda ular bir "
+            "vaqtda ishlaydigan oltita qatlam:")
+
+    bullets(d, [
+        "`LanguageHeaderHandler` — joriy so'rovning til sarlavhasini keyingi servisga "
+        "uzatadi.",
+        "`UserHeaderHandler`, `PersonHeaderHandler`, `LegalHeaderHandler` — uch xil "
+        "foydalanuvchi turining ma'lumotini uzatadi (xodim, jismoniy shaxs, "
+        "yuridik shaxs).",
+        "`AppHeaderHandler` — qaysi modul chaqirganini bildiradi.",
+        "`ApiErrorHandler` — teskari yo'nalishda ishlaydi: javobni ko'rib, xato "
+        "holat kodini domen istisnosiga aylantiradi.",
+    ])
+
+    para(d, "Til uzatadigan handler ichi shunday ko'rinadi:")
+
+    code(d, """protected override async Task<HttpResponseMessage> SendAsync(
+    HttpRequestMessage request, CancellationToken cancellationToken)
+{
+    var httpContext = _serviceProvider.GetService<IHttpContextAccessor>()?.HttpContext;
+
+    if (httpContext != null)
+    {
+        // 1. Headerdan olishga urining (frontend yuborganda)
+        var langValue = GetLanguageFromHeader(httpContext)
+                     // 2. Yo'q bo'lsa query parametrdan ol (boshqa service yuborganda)
+                     ?? GetLanguageFromQuery(httpContext);
+
+        if (!string.IsNullOrEmpty(langValue))
+        {
+            // Duplicate bo'lmasligi uchun
+            if (request.Headers.Contains(ApplicationHeaderConst.Language))
+                request.Headers.Remove(ApplicationHeaderConst.Language);
+
+            request.Headers.Add(ApplicationHeaderConst.Language, langValue);
+        }
+    }
+
+    return await base.SendAsync(request, cancellationToken);
+}""")
+
+    para(d, "Ikki nozik joy bor. Birinchisi — `IHttpContextAccessor` konstruktorda "
+            "emas, `IServiceProvider` orqali olinadi. Sababi 2-bo'limda aytilgan "
+            "handler keshlanishi: handler `HttpClient` bilan birga saqlanadi, ya'ni "
+            "uning umri so'rovdan uzun. Scoped xizmatni konstruktorda ushlab qolish "
+            "captive dependency bo'lardi va birinchi so'rovning konteksti hamma "
+            "keyingi so'rovlarda qolib ketardi.")
+
+    para(d, "Ikkinchisi — sarlavha qo'shishdan oldin o'chiriladi. Chidamlilik qatlami "
+            "so'rovni qayta yuborganda bir xil `HttpRequestMessage` qayta ishlanishi "
+            "mumkin, va sarlavha ikki marta qo'shilib qolardi.")
+
+    note(d, "Mana bu tuzoqni esda saqlab qoldim:",
+         "`ConfigureHttpClient` ichidagi `new Uri(config.BaseUrl)` — lambda. U DI "
+         "ro'yxatga olinganda emas, `HttpClient` birinchi marta yaratilganda "
+         "bajariladi. Natijada `BaseUrl` noto'g'ri bo'lsa servis muammosiz ishga "
+         "tushadi, health check yashil bo'ladi — va faqat o'sha SDK ni inject "
+         "qiladigan kontroller 500 qaytaradi. Stack trace da esa shunchaki "
+         "`UriFormatException`, qaysi SDK aybli ekani yozilmaydi. Ya'ni tez "
+         "ishga tushish lazy ishga tushirishning narxi bilan keladi.")
+
     sources(d, [
         ("IHttpClientFactory with .NET",
          "https://learn.microsoft.com/en-us/dotnet/core/extensions/httpclient-factory"),

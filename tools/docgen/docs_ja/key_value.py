@@ -226,6 +226,85 @@ dict.TryGetValue(key, out var found);     // false — element topilmaydi
         "olib aylanish kerak: `foreach (var key in dict.Keys.ToList())`.",
     ])
 
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: reflection natijasini keshlash")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida 5-bo'limda aytilgan `ConcurrentDictionary` "
+            "ning aniq bir ishlatilishi bor va u menga lug'at haqida yangi narsa "
+            "o'rgatdi.")
+
+    para(d, "Vazifa shunday. Baza konteksti saqlashdan oldin har bir o'zgargan obyektni "
+            "tekshirishi kerak: u maxsus atribut bilan belgilanganmi va belgilangan "
+            "bo'lsa qaysi property ni o'qish kerak. Atributni topish — reflection, "
+            "ya'ni qimmat amal. Saqlash esa har bir so'rovda bajariladi va o'zgargan "
+            "obyektlar soni yuzlab bo'lishi mumkin.")
+
+    code(d, """// Entity turi -> qo'riqlanadigan property nomi. Atributi yo'q turlar bo'sh satr
+// bilan keshlanadi, ya'ni reflection har bir tur uchun bir marta ishlaydi.
+private static readonly ConcurrentDictionary<Type, string> SchoolYearGuardProperties = new();""",
+         caption="ApplicationDbContext.cs")
+
+    para(d, "O'qish esa `GetOrAdd` bilan bajariladi:")
+
+    code(d, """var propertyName = SchoolYearGuardProperties.GetOrAdd(
+    entry.Metadata.ClrType,
+    clrType => clrType.GetCustomAttribute<SchoolYearProcessGuardAttribute>()
+        ?.SchoolYearPropertyName ?? string.Empty);
+
+if (propertyName.Length == 0)
+    continue;   // bu tur qo'riqlanmaydi""")
+
+    h2(d, "8.1 Kalit sifatida Type")
+
+    para(d, "6-bo'limda custom kalit uchun `GetHashCode` va `Equals` ni to'g'ri "
+            "yozish kerakligi aytilgan. Bu yerda kalit — `System.Type`, ya'ni .NET "
+            "ning o'z turi, va u shu talablarni allaqachon qondiradi: bitta tur uchun "
+            "CLR da bitta `Type` nusxasi bo'ladi, shuning uchun taqqoslash "
+            "havola bo'yicha ishlaydi va juda tez.")
+
+    para(d, "Lekin `entry.Metadata.ClrType` yozilganiga e'tibor bering, "
+            "`entry.Entity.GetType()` emas. Sababi lazy loading uchun EF Core "
+            "obyektni proxy sinfiga o'raydi — o'sha proxy ning turi boshqa `Type` "
+            "bo'ladi va unda atribut topilmaydi. Kalit sifatida noto'g'ri qiymat "
+            "olinsa, lug'at ham to'g'ri javob bera olmaydi. Bu menga kalit tanlashning "
+            "qanchalik nozik bo'lishini ko'rsatdi.")
+
+    h2(d, "8.2 Salbiy natijani ham keshlash")
+
+    para(d, "Eng qiziq tafsilot — izohda aytilgan narsa. Atributi **yo'q** turlar "
+            "bo'sh satr bilan keshlanadi.")
+
+    para(d, "Agar faqat topilgan natijalar saqlansa, atributi yo'q turlar uchun "
+            "reflection har safar qaytadan ishlardi. Bunday turlar esa aksariyatni "
+            "tashkil qiladi — tizimda yuzlab entity bor, qo'riqlanadigani yigirmaga "
+            "yaqin. Ya'ni kesh eng ko'p uchraydigan holatda umuman yordam bermasdi.")
+
+    code(d, """// Atribut topilmasa — null emas, bo'sh satr saqlanadi
+clrType => clrType.GetCustomAttribute<SchoolYearProcessGuardAttribute>()
+    ?.SchoolYearPropertyName ?? string.Empty""")
+
+    note(d, "Bu naqsh menga alohida yoqdi:",
+         "\"Javob yo'q\" ning o'zi ham javob, va uni saqlash kerak. 2-bo'limda "
+         "`TryGetValue` haqida gapirganda men buni \"bor yoki yo'q\" deb oddiy "
+         "qaragan edim. Bu yerda esa uch holat bor: hali tekshirilmagan, "
+         "tekshirilgan va topilmagan, tekshirilgan va topilgan. Lug'atda birinchi "
+         "ikkisini farqlash uchun maxsus qiymat kerak bo'ladi — bu yerda bo'sh satr. "
+         "Agar property nomi `null` bo'lishi mumkin bo'lganda, bo'sh satr o'rniga "
+         "boshqa belgi tanlash kerak bo'lardi.")
+
+    h2(d, "8.3 Nega aynan ConcurrentDictionary")
+
+    para(d, "Lug'at `static readonly`, ya'ni butun ilova uchun bitta va ko'p so'rov "
+            "bir vaqtda unga murojaat qiladi. Oddiy `Dictionary` bu holatda "
+            "ishlamaydi — 5-bo'limda aytilganidek, parallel yozish uning ichki "
+            "tuzilmasini buzadi va natija kutilmagan bo'ladi, hatto cheksiz "
+            "aylanishga tushib qolishi mumkin.")
+
+    para(d, "`GetOrAdd` esa atomik: bir vaqtda ikki so'rov bir xil tur uchun "
+            "murojaat qilsa, lambda ikki marta bajarilishi mumkin, lekin lug'atga "
+            "bitta qiymat tushadi. Bu yerda bu muammo emas — reflection sof funksiya, "
+            "ikki marta chaqirilsa ham bir xil natija beradi.")
+
     sources(d, [
         ("Dictionary<TKey,TValue> Class",
          "https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2"),

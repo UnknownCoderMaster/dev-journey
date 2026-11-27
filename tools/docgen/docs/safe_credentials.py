@@ -237,7 +237,95 @@ if (app.Environment.IsProduction() && key.StartsWith("dev-"))
     ])
 
     # ───────────────────────────────────────────
-    h1(d, "10. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "10. Amaliyotdan: o'rin egalari va CI dagi qo'riqchi")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida qirqqa yaqin servis bor va har birining o'z "
+            "konfiguratsiya fayli. 4-bo'limda aytilgan atrof-muhit o'zgaruvchilari "
+            "yondashuvi tanlangan, lekin uni amalga oshirish usuli odatdagidan boshqacha.")
+
+    h2(d, "10.1 Fayl tuzilishi qoladi, qiymatlar ketadi")
+
+    para(d, "ASP.NET Core ning standart yo'li — `Redis__Password` ko'rinishidagi "
+            "o'zgaruvchi berish, u fayldagi qiymatni ustidan yozadi. Bu yerda esa fayl "
+            "o'z tuzilishini saqlab qoladi va qiymat o'rniga nom turadi:")
+
+    code(d, """{
+  "Idp": {
+    "BaseUrl": "${idp_baseurl}",
+    "ClientId": "${idp_clientid}",
+    "ClientSecret": "${idp_clientsecret}"
+  }
+}""", caption="appsettings.Production.json")
+
+    para(d, "Almashtirishni o'z kodimiz bajaradi — hech qanday `envsubst`, entrypoint "
+            "skripti yoki tashqi paket yo'q. Devops faqat o'zgaruvchilarni o'rnatadi:")
+
+    code(d, """foreach (var kvp in configuration.AsEnumerable())
+{
+    if (kvp.Value != null && kvp.Value.Contains("${"))
+    {
+        var updatedValue = kvp.Value;
+
+        foreach (var env in Environment.GetEnvironmentVariables().Cast<DictionaryEntry>())
+        {
+            var placeholder = $"${{{env.Key}}}";
+
+            if (updatedValue.Contains(placeholder))
+                updatedValue = updatedValue.Replace(placeholder, env.Value?.ToString());
+        }
+
+        if (updatedValue != kvp.Value)
+            configuration[kvp.Key] = updatedValue;
+    }
+}""", caption="Erp.Core/Extensions/ConfigurationExtensions.cs")
+
+    para(d, "Standart usulga nisbatan yutug'i — hujjatlilik. Faylga qarab qaysi qiymat "
+            "tashqaridan kelishini darhol ko'rish mumkin. Standart usulda fayldagi "
+            "qiymat aldamchi bo'ladi: ko'rinib turgani amalda ishlatilmayotgan bo'lishi "
+            "mumkin.")
+
+    para(d, "Narxi ham bor. Agar o'zgaruvchi topilmasa, o'rin egasi o'z holida qoladi — "
+            "hech qanday xato, ogohlantirish yoki log yo'q. Ilova ko'tariladi va muammo "
+            "faqat o'sha qiymat ishlatilganda ochiladi. Linux da o'zgaruvchi nomi harf "
+            "registriga sezgir, shuning uchun hamma o'rin egasi kichik harfda yozilgan.")
+
+    h2(d, "10.2 Gitleaks — 8-bo'limdagi qoidaning amalga oshirilishi")
+
+    para(d, "Sir git ga tushmasligini CI tekshiradi. `main` va `dev` ga yuborilgan har "
+            "bir PR da Gitleaks o'z qoidalari bilan, ustiga `Password`, `ClientSecret` "
+            "va `Key` naqshlari bo'yicha oddiy `git grep` ishga tushadi. Tekshiruv "
+            "yiqilsa merge bloklanadi.")
+
+    para(d, "O'rin egalari yondashuvi bu tekshiruv bilan yaxshi yarashadi: "
+            "repozitoriyda `${idp_clientsecret}` satri turadi, u hech qanday naqshga "
+            "tushmaydi, haqiqiy parol esa faqat devops registrida yashaydi.")
+
+    note(d, "Lekin halol aytish kerak:",
+         "`appsettings.Development.json` fayllarining ko'pida hali ham haqiqiy "
+         "development parollari turadi. Ular Gitleaks ishga tushirilishidan oldin "
+         "commit qilingan va hozir \"legacy\" deb qabul qilingan — tekshiruv faqat yangi "
+         "o'zgarishlarni ushlaydi. 7-bo'limda aytilganidek, bir marta git ga tushgan "
+         "sirni butunlay tozalash tarixni qayta yozishni talab qiladi, bu esa ko'p odam "
+         "ishlaydigan repozitoriyda qimmat amal. Natijada ular o'z joyida qolgan. Men "
+         "buni to'g'ri yechim deb hisoblamayman, lekin real loyihada shunday vaziyat "
+         "uchrashini bilib qo'yish kerak: qoida kiritilgan sana va kod yozilgan sana "
+         "bir xil emas.")
+
+    h2(d, "10.3 Hamma narsani sir deb hisoblash ham xato")
+
+    para(d, "Bir vaqt MinIO bucket nomi \"sozlamani markazlashtiramiz\" degan niyat "
+            "bilan umumiy `${minio_bucket}` o'rin egasiga o'tkazildi. Natijada har bir "
+            "servis o'z bucket iga yozishi kerak bo'lgan tizimda hamma bitta bucket ga "
+            "ko'rsatib qoldi va Production da fayllar topilmay qoldi.")
+
+    para(d, "Endpoint va bucket nomi — sir emas, ular manzil. Ularni yashirish hech "
+            "narsa himoya qilmaydi, faqat servislar orasidagi farqni yo'q qiladi. "
+            "Shundan keyin sir deb faqat `AccessKey` va `SecretKey` qoldirildi. "
+            "Ya'ni \"nima sir, nima shunchaki sozlama\" degan savolni oldindan hal qilib "
+            "qo'yish kerak — aks holda himoya choralari ishonchlilikni pasaytiradi.")
+
+    h1(d, "11. Xulosa")
 
     bullets(d, [
         "Git ga tushgan sir butun tarixda qoladi — uni faqat bekor qilish "

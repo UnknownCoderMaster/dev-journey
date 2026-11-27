@@ -247,7 +247,106 @@ public async Task GenerateDailyReportAsync(CancellationToken ct)
           widths=[3.8, 11.7])
 
     # ───────────────────────────────────────────
-    h1(d, "8. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: UTC, standart qiymat va yetim joblar")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida rejali ishlar alohida job servisida, "
+            "Hangfire orqali bajariladi. 4-bo'limda ko'rsatilgan `AddOrUpdate` shu "
+            "yerda ishlatiladi, lekin uchta amaliy tafsilot qo'shilgan.")
+
+    h2(d, "8.1 Cron ifodasi konfiguratsiyada, kodda emas")
+
+    para(d, "Har bir rejali ish uchun cron ifodasi sozlama sinfidan o'qiladi:")
+
+    code(d, """public class HangfireConfig
+{
+    /// Butun Hangfire dvigateli: storage, job server va recurring joblar.
+    /// false bo'lsa hech qanday job bajarilmaydi.
+    public bool Enabled { get; set; }
+
+    /// /hangfire dashboard'i ochiqmi. false bo'lsa yo'l ro'yxatga olinmaydi (404),
+    /// joblar esa oldingidek ishlayveradi.
+    public bool DashboardEnabled { get; set; }
+
+    public string RunCustomJobCron { get; set; }
+    public string RunAchievementStreakCron { get; set; }
+
+    /// MEDIA "Trendda" reytingini qayta hisoblash.
+    /// Cron UTC da — sukut "0 22 * * *" = Toshkent 03:00.
+    public string RunMediaVideoTrendingCron { get; set; }
+}""", caption="HangfireConfig.cs")
+
+    para(d, "Ro'yxatga olish esa ishga tushishda, `IHostedService` ichida bajariladi:")
+
+    code(d, """var mediaVideoTrendingCron = hangfireConfig.RunMediaVideoTrendingCron;
+if (string.IsNullOrEmpty(mediaVideoTrendingCron))
+    mediaVideoTrendingCron = "0 22 * * *"; // default: daily at 03:00 (Toshkent)
+
+_recurringJobManager.AddOrUpdate<IMediaVideoTrendingDailyScheduler>(
+    recurringJobId: "media-video-trending-daily",
+    methodCall: s => s.ExecuteAsync(),
+    cronExpression: mediaVideoTrendingCron,
+    queue: "media-video-trending-queue");""", caption="HangfireRecurringJobsStartup.cs")
+
+    bullets(d, [
+        "**`recurringJobId` qat'iy satr.** `AddOrUpdate` shu id bo'yicha ishlaydi, "
+        "ya'ni ikkinchi deploy da yangi job yaratmaydi, mavjudini yangilaydi. 4-bo'limda "
+        "aytilgan bu xususiyat amalda juda muhim: aks holda har bir qayta ishga "
+        "tushirish takroriy joblarni ko'paytirardi.",
+        "**Har bir job o'z navbatida.** Og'ir hisoblash yengil ishlarni kutib "
+        "qo'ymasligi uchun.",
+        "**Standart qiymat kodda.** Konfiguratsiya bo'sh bo'lsa job baribir "
+        "ro'yxatga olinadi. Birinchi ikkisi esa boshqacha: `RunCustomJobCron` bo'sh "
+        "bo'lsa o'sha job umuman yaratilmaydi. Ikki xil yondashuv — biri \"jim "
+        "o'chirish\" imkonini beradi, ikkinchisi bermaydi.",
+    ])
+
+    h2(d, "8.2 UTC — 6-bo'limdagi maslahatning real narxi")
+
+    para(d, "Yuqoridagi izohga qaraganda `\"0 22 * * *\"` — Toshkentda soat uchda. "
+            "Server UTC da ishlaydi, Toshkent esa UTC+5, shuning uchun 22:00 UTC "
+            "keyingi kunning 03:00 ga to'g'ri keladi.")
+
+    para(d, "Bu yerdagi xavf aniq: ifodani o'qiyotgan odam uni mahalliy vaqt deb "
+            "tushunishi juda oson. \"Kechqurun 22:00 da ishlaydi\" deb o'ylab, "
+            "foydalanuvchilar hali tizimda bo'lgan paytda og'ir hisoblashni ishga "
+            "tushirib yuborish mumkin. Shuning uchun loyihada har bir cron ifodasining "
+            "yonida mahalliy vaqtdagi ekvivalenti izohda yozilgan. Men buni majburiy "
+            "qoida deb bilaman — ifodaning o'zi hech qachon o'z vaqt mintaqasini "
+            "aytmaydi.")
+
+    h2(d, "8.3 Deploy paytida to'xtab qolgan job")
+
+    para(d, "Eng qiziq hodisa shu. Tizimda uzoq davom etadigan ishlar bazada o'z "
+            "holatini yuritadi: boshlanganda `IN_PROGRESS`, tugaganda `COMPLETED`. "
+            "Yangi job ishga tushishdan oldin esa \"shu turdagi ish allaqachon "
+            "bajarilayotgan bo'lmasin\" degan tekshiruv bor.")
+
+    para(d, "Deploy, qulash yoki konteyner qayta ishga tushganda bajarilayotgan ish "
+            "yarim yo'lda qoladi. Hangfire uni davom ettirmaydi, bazadagi yozuv esa "
+            "`IN_PROGRESS` holatida muzlab qoladi. Natijada o'sha turdagi hamma "
+            "keyingi job **abadiy** bloklanadi.")
+
+    para(d, "Bu aniq bir ishni bir necha oy davomida to'xtatib qo'ygan. Yechim — ishga "
+            "tushishda yetim yozuvlarni yopish:")
+
+    code(d, """public async Task StartAsync(CancellationToken cancellationToken)
+{
+    await CloseOrphanedInProgressJobsAsync(cancellationToken);
+
+    // ... keyin recurring joblar ro'yxatga olinadi
+}""")
+
+    note(d, "Mana bu menga eng muhim saboq bo'ldi:",
+         "Cron ifodasini to'g'ri yozish — masalaning oson qismi. Qiyin qismi "
+         "6-bo'limda aytilgan \"ish qaytadan ishga tushirilsa nima bo'ladi\" savoli. "
+         "Bu yerda javob yomon edi: tizim o'zini bloklab qo'yardi va buni hech kim "
+         "sezmasdi, chunki xato ham, log ham yo'q — shunchaki hech narsa "
+         "bajarilmasdi. Shuning uchun har qanday uzoq ishning holati bazada "
+         "saqlansa, \"yarim o'lik\" yozuvlarni kim va qachon tozalashini oldindan "
+         "hal qilib qo'yish kerak.")
+
+    h1(d, "9. Xulosa")
 
     bullets(d, [
         "Cron ifodasi maydonlardan iborat: daqiqa, soat, oy kuni, oy, "

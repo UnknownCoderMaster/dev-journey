@@ -226,6 +226,131 @@ static string SafeCsvCell(string value)
         "Normalizatsiya (`string.Normalize()`) yordam beradi.",
     ])
 
+    # ───────────────────────────────────────────
+    h1(d, "7. Amaliyotdan: validatsiya pipeline ga chiqarilganda")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida FluentValidation mingdan ortiq faylda "
+            "uchraydi — amalda har bir komanda va so'rov uchun validator bor. 5-bo'limda "
+            "validatsiya qayerda bo'lishi kerakligi haqida gapirgandim; bu yerda u "
+            "kontrollerda ham, ishlovchida ham emas, ularning orasida joylashgan.")
+
+    h2(d, "7.1 ValidationBehaviour — bitta joyda, hamma uchun")
+
+    para(d, "Tizim CQRS bo'yicha qurilgan: kontroller faqat komandani yuboradi, "
+            "ishlovchi uni bajaradi. Validatsiya esa MediatR pipeline behaviour "
+            "sifatida ikkisining orasiga qo'yilgan:")
+
+    code(d, """public class ValidationBehaviour<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+     where TRequest : notnull
+{
+    private readonly IEnumerable<IValidator<TRequest>> _validators;
+
+    public async Task<TResponse> Handle(TRequest request,
+                                        RequestHandlerDelegate<TResponse> next,
+                                        CancellationToken cancellationToken)
+    {
+        if (_validators.Any())
+        {
+            var context = new ValidationContext<TRequest>(request);
+
+            var validationResults = await Task.WhenAll(
+                _validators.Select(v => v.ValidateAsync(context, cancellationToken)));
+
+            var failures = validationResults
+                .Where(r => r.Errors.Any())
+                .SelectMany(r => r.Errors)
+                .ToList();
+
+            if (failures.Any())
+                throw new WbValidationException()
+                    .WithCategory("Validation")
+                    .WithVisibility(WbExceptionVisibility.CLIENT_VISIBLE)
+                    .WithErrors(failures.Select(x => new WbFailure
+                    {
+                        Key = x.PropertyName,
+                        ErrorMessage = x.ErrorMessage
+                    }).ToArray());
+        }
+
+        return await next();
+    }
+}""", caption="Erp.Core.Service.Application/ValidationBehaviour.cs")
+
+    para(d, "Validatorlar assembly skaneri bilan ro'yxatga olinadi, ya'ni yangi "
+            "validator yozilsa u o'z-o'zidan ishga tushadi — hech qayerda qo'lda "
+            "ulash kerak emas. Bu 5-bo'limdagi \"validatsiyani unutib qo'yish\" "
+            "xatarini sezilarli kamaytiradi.")
+
+    bullets(d, [
+        "`IEnumerable<IValidator<TRequest>>` — bitta komanda uchun bir nechta "
+        "validator bo'lishi mumkin va hammasi ishlaydi.",
+        "`Task.WhenAll` — ular parallel bajariladi. Agar validatorlar bazaga "
+        "murojaat qilsa bu sezilarli tezlik beradi.",
+        "Hamma xato **bir vaqtda** qaytariladi, birinchisida to'xtab qolmaydi. "
+        "Foydalanuvchi uchun bu muhim: formadagi hamma xato bir ko'rinishda chiqadi.",
+        "`next()` faqat xato bo'lmaganda chaqiriladi, ya'ni ishlovchi noto'g'ri "
+        "ma'lumotni umuman ko'rmaydi.",
+    ])
+
+    h2(d, "7.2 Validator qanday ko'rinadi")
+
+    code(d, """public class AnnouncementCreateCommandValidator : AbstractValidator<AnnouncementCreateCommand>
+{
+    public AnnouncementCreateCommandValidator()
+    {
+        RuleFor(x => x.DocNumber)
+            .NotEmpty().WithMessage("Hujjat raqami kiritilishi shart!")
+            .MaximumLength(30).WithMessage("Hujjat raqami 30 belgidan oshmasligi kerak!");
+
+        RuleFor(x => x.Title)
+            .NotEmpty().WithMessage("Sarlavha kiritilishi shart!")
+            .MaximumLength(100).WithMessage("Sarlavha 100 belgidan oshmasligi kerak!");
+
+        RuleFor(x => x.EndAt)
+            .GreaterThan(x => x.StartAt)
+            .When(x => x.StartAt.HasValue && x.EndAt.HasValue)
+            .WithMessage("Tugash sanasi boshlanish sanasidan keyin bo'lishi kerak!");
+
+        RuleFor(x => x.Apps)
+            .NotEmpty().WithMessage("Kamida bitta modul tanlanishi shart!");
+    }
+}""")
+
+    para(d, "Oxirgi ikkita qoida 2-bo'limdagi allowlist tamoyilining ko'rinishi. "
+            "`GreaterThan` — bu \"nima noto'g'ri\" emas, \"nima to'g'ri\" "
+            "degan shart. `MaximumLength(30)` esa bazadagi ustun uzunligi bilan "
+            "aynan bir xil, ya'ni validatsiya baza cheklovini takrorlaydi va xato "
+            "`DbUpdateException` ga aylanib ketmaydi.")
+
+    note(d, "Bu yerda bir muammoni payqadim:",
+         "Xato xabarlari validator ichida to'g'ridan-to'g'ri o'zbek tilida yozilgan. "
+         "Tizim esa to'rt tilni qo'llab-quvvatlaydi va boshqa joylarda "
+         "`localizationBuilder.For(\"KEY\")` orqali tarjima olinadi. Ya'ni "
+         "validatsiya xabarlari tarjima tizimidan tashqarida qolgan. Buni "
+         "`WithMessage` o'rniga tarjima kalitini berib tuzatish mumkin, lekin "
+         "mingdan ortiq validatorni o'zgartirish kerak bo'ladi. Shuning uchun "
+         "o'zim uchun qoida chiqardim: ko'p tilli tizimda birinchi validatordan "
+         "boshlab tarjima kalitini ishlatish kerak — keyinroq o'tish juda qimmat.")
+
+    h2(d, "7.3 Sanitizatsiya qayerda")
+
+    para(d, "1-bo'limda validatsiya va sanitizatsiya farqi aytilgan. Bu tizimda "
+            "sanitizatsiya deyarli yo'q va bu to'g'ri qaror: ma'lumot bazaga xom "
+            "holida saqlanadi, chiqishda esa har bir kontekst o'zini himoya qiladi.")
+
+    para(d, "Lekin 4-bo'limdagi \"har bir kontekst uchun o'z kodlashi\" qoidasi "
+            "buzilgan bitta joy uchradi: fayl yuklab berish kodi `Content-Disposition` "
+            "sarlavhasini qo'lda qurgan edi. HTTP sarlavhalari faqat ASCII qabul "
+            "qiladi, o'zbekcha fayl nomlarida esa `o'`, `g'` va `‘`, `’` belgilari "
+            "bor. Natijada Kestrel to'g'ridan-to'g'ri yiqilardi:")
+
+    code(d, """Invalid non-ASCII or control character in header: 0x2018""")
+
+    para(d, "Yechim sanitizatsiya yozish emas edi — ASP.NET Core ning "
+            "`FileDownloadName` xossasini ishlatish yetarli bo'ldi, u sarlavhani "
+            "RFC 6266 bo'yicha o'zi quradi. Ya'ni to'g'ri javob: kontekstni "
+            "biladigan kutubxona funksiyasini topish, o'zi tozalashga urinmaslik.")
+
     sources(d, [
         ("Model validation in ASP.NET Core",
          "https://learn.microsoft.com/en-us/aspnet/core/mvc/models/validation"),

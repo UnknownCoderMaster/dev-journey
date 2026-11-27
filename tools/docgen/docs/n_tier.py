@@ -246,7 +246,89 @@ public void Domain_should_not_depend_on_infrastructure()
             "buzish mumkin emas, chunki CI quvuri to'xtaydi.")
 
     # ───────────────────────────────────────────
-    h1(d, "8. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: chegaralar loyiha havolalari bilan ushlab turilganda")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida yigirmaga yaqin backend servis bor va "
+            "ularning hammasi bir xil qatlamli tuzilmaga ega. 7-bo'limda chegaralarni "
+            "avtomatik nazorat qilish haqida gap ketgan — bu yerda u alohida vosita "
+            "bilan emas, loyiha havolalarining o'zi bilan amalga oshirilgan.")
+
+    h2(d, "8.1 Har bir servisning tuzilmasi")
+
+    code(d, """Erp.Service.{Domain}.sln
+src/
+  Erp.Service.{Domain}.WebApi/           Controllers, Program.cs, appsettings.*.json
+  libs/
+    Erp.Service.{Domain}.Domain/         Entity lar, biznes qoidalari
+    Erp.Service.{Domain}.Application/    MediatR handler, AutoMapper, FluentValidation
+    Erp.Service.{Domain}.Infrastructure/ DbContext ro'yxati, tashqi mijozlar
+    shared/
+      Erp.Service.{Domain}.Models/       Command, Query, DTO — iste'molchilar bilan umumiy
+      Erp.Service.{Domain}.Sdk/          Boshqa servislar chaqiradigan Refit interfeyslari
+test/
+  Erp.Service.{Domain}.UnitTest/""", caption="erp-{domain}-service tuzilmasi")
+
+    para(d, "Bog'liqlik yo'nalishi qat'iy: `WebApi → Infrastructure → Application → "
+            "Domain`. Teskari havola yo'q, shuning uchun 3-bo'limdagi qoida "
+            "kelishuv darajasida qolmaydi — uni buzgan kod umuman kompilyatsiya "
+            "bo'lmaydi.")
+
+    para(d, "`Models` va `Sdk` loyihalari alohida turadi va yuqoriga hech qanday "
+            "havolasi yo'q. Sababi ular tashqi iste'molchilarga beriladi: boshqa servis "
+            "`Erp.Service.Com.Sdk` ga havola qo'shadi va shu bilan birga butun COM "
+            "domenini olib kelmaydi.")
+
+    h2(d, "8.2 Qatlamlar amalda nimani o'z ichiga oladi")
+
+    para(d, "Yangi funksiya qo'shish tartibi hujjatda yozilgan va u qatlamlar bo'yicha "
+            "pastdan yuqoriga boradi:")
+
+    bullets(d, [
+        "**Domain** — entity qo'shiladi yoki o'zgartiriladi.",
+        "**Models** — `Command`, `Query` va `Dto` lar e'lon qilinadi.",
+        "**Application** — MediatR ishlovchisi, FluentValidation validatori va "
+        "AutoMapper profili.",
+        "**Infrastructure** — odatda hech narsa. Entity lar markazlashgan "
+        "`IApplicationDbContext` orqali keladi; bu qatlam faqat tashqi integratsiya "
+        "yoki repozitoriy uchun ochiladi.",
+        "**WebApi** — yupqa kontroller, ichida bitta `await Mediator.Send(...)`.",
+    ])
+
+    para(d, "Kontrollerning qanchalik yupqa ekani 2-bo'limdagi \"taqdimot qatlamida "
+            "mantiq bo'lmasligi kerak\" qoidasining eng toza ko'rinishi:")
+
+    code(d, """[HttpPost]
+[Authorize(ComPermissionCode.CommissionCreate)]
+[ProducesResponseType(typeof(WbHaveId<long>), 200)]
+public async Task<IActionResult> CreateAsync([FromBody] CommissionCreateCommand command)
+    => Ok(await Mediator.Send(command));""")
+
+    h2(d, "8.3 Markazlashgan DbContext — qoidadan chetga chiqish")
+
+    para(d, "4-bo'limdagi tuzilmaga bitta jiddiy istisno bor. Har bir servisning o'z "
+            "`DbContext` i yo'q — barchasi umumiy kutubxonada yashaydigan bitta "
+            "`ApplicationDbContext` dan foydalanadi. U mingdan ortiq qator va yuzlab "
+            "`DbSet` ni o'z ichiga oladi.")
+
+    para(d, "Buning sababi amaliy: baza bitta, sxemalar esa domenlar bo'yicha "
+            "ajratilgan. COM servisi hujjat yaratishda ADM dagi tashkilot va STD dagi "
+            "o'quv yiliga murojaat qilishi kerak. Agar har bir servis o'z kontekstiga "
+            "faqat o'z entity larini joylasa, bu havolalar uzilib qolardi.")
+
+    note(d, "Lekin narxi juda yuqori va men buni o'z ko'zim bilan ko'rdim:",
+         "Umumiy kontekstdagi bitta xato entity **hamma** servisni yiqitadi, nafaqat "
+         "o'z modulini. EF Core modelni birinchi ishlatishda validatsiya qiladi, "
+         "shuning uchun servis muammosiz ko'tariladi va keyin har bir bazaga murojaat "
+         "500 qaytaradi. Bir holatda bitta modulda `long?` turidagi audit ustuniga "
+         "navigatsiya xossasi qo'shilgan edi, ishora qilingan `User.Id` esa `int` — "
+         "model yiqildi va yigirma servis bir vaqtda ishlamay qoldi. Shundan keyin "
+         "qoida paydo bo'ldi: umumiy entity larga tegilgandan keyin modelni bazasiz, "
+         "offline qurib ko'rish kerak. Bu 6-bo'limdagi \"qatlamlar soni\" "
+         "muhokamasining boshqa tomoni: qatlamlar to'g'ri ajratilgan bo'lsa ham, "
+         "ularning ichidagi umumiy komponent butun tizimni bir-biriga bog'lab qo'yadi.")
+
+    h1(d, "9. Xulosa")
 
     bullets(d, [
         "N-qatlamli arxitektura mas'uliyatlarni ajratadi va har bir qatlamga "

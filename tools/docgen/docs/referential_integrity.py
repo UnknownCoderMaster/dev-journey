@@ -211,7 +211,91 @@ ALTER TABLE orders VALIDATE CONSTRAINT fk_orders_customer;""")
          "har kuni bo'ladigan muammoni sotib olgan bo'laman.")
 
     # ───────────────────────────────────────────
-    h1(d, "8. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: qoidalar jadvalga yozilganda")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida bitta PostgreSQL bazasida har bir domen "
+            "uchun alohida sxema bor va mingdan ortiq migratsiya fayli. Shunday hajmda "
+            "\"tashqi kalit qo'yamizmi yoki yo'qmi\" degan savolni har safar qaytadan "
+            "muhokama qilib bo'lmaydi. Shuning uchun qaror jadval shaklida hujjatga "
+            "yozilgan va u majburiy.")
+
+    h2(d, "8.1 Qaysi ustunga tashqi kalit qo'yiladi")
+
+    table(d, ["Ustun", "FK", "Nimaga ishora qiladi"],
+          [["`organization_id`", "Ha", "`adm.info_organization.id` — ijarachi izolyatsiyasi"],
+           ["`state_id`", "Ha", "`adm.enum_state.id` — aktiv/passiv holat"],
+           ["`status_id`", "Ha", "`adm.enum_status.id` — hujjat hayot davri"],
+           ["`table_id`", "Ha", "`adm.sys_table.id` — jadval metama'lumoti"],
+           ["`doc_id` / `document_id`", "Yo'q", "Polimorf havola — jadvalni `doc_table_id` aniqlaydi"],
+           ["`created_by`, `last_modified_by`", "Yo'q", "Faqat audit maydoni"],
+           ["`owner_id` (translate)", "Ha", "Ona jadvalning `id` si"]],
+          widths=[4.6, 1.8, 9.1])
+
+    para(d, "Birinchi uch qator kutilgan narsa. Qolgan uchtasi esa 7-bo'limdagi "
+            "\"cheklovsiz ishlash holatlari\" ga aniq misol bo'ladi.")
+
+    h2(d, "8.2 Polimorf havola — cheklov qo'yish mumkin bo'lmagan joy")
+
+    para(d, "Tizimda `sys_*_manage` turidagi jadvallar bor. Ular biror holat qaysi hujjat "
+            "asosida yuzaga kelganini saqlaydi. Masalan xodimning lavozimi buyruq bilan "
+            "tasdiqlanadi, lekin buyruq turlari har xil va har biri o'z jadvalida yotadi:")
+
+    code(d, """doc_table_id   INTEGER,     -- qaysi jadval (adm.sys_table ga FK bor)
+doc_id         BIGINT,      -- o'sha jadvaldagi id (FK YO'Q)
+end_table_id   INTEGER,     -- tugatish hujjati turi (FK bor)
+end_doc_id     BIGINT       -- tugatish hujjati id si (FK YO'Q)""")
+
+    para(d, "`doc_id` ga tashqi kalit qo'yish mumkin emas, chunki u bitta jadvalga "
+            "emas, o'nlab jadvaldan biriga ishora qiladi — qaysi biriga ekani "
+            "`doc_table_id` qiymatiga bog'liq. Relyatsion model bunday havolani "
+            "ifodalay olmaydi.")
+
+    para(d, "Buning o'rniga `doc_table_id` ga cheklov qo'yilgan: u `adm.sys_table` "
+            "da ro'yxatga olingan jadvallardan biriga ishora qilishi shart. Ya'ni "
+            "\"qaysi jadval\" qismi qo'riqlanadi, \"qaysi qator\" qismi esa ilova "
+            "darajasida tekshiriladi. Bu to'liq yaxlitlik emas, lekin mutlaqo "
+            "cheklovsiz ustundan ancha yaxshi — yozuvni qaysi jadvalda qidirish "
+            "kerakligi har doim to'g'ri bo'ladi.")
+
+    h2(d, "8.3 ON DELETE CASCADE umuman ishlatilmaydi")
+
+    para(d, "2-bo'limda cascade haqida gap ketgan. Loyihada esa qoida bir og'iz: "
+            "`ON DELETE CASCADE` ishlatilmaydi, o'chirish mantig'i to'liq ilova "
+            "darajasida boshqariladi.")
+
+    para(d, "Sababi 3-bo'limdagi ziddiyat bilan bog'liq. Hujjatlar fizik o'chirilmaydi — "
+            "ularning `status_id` si `DELETED` ga o'tadi. Shuning uchun haqiqiy `DELETE` "
+            "amali juda kam bajariladi, va bajarilganda nima o'chishi kerakligi biznes "
+            "qoidasiga bog'liq: ba'zi bolalar yozuvlar arxivda qolishi, ba'zilari "
+            "boshqa hujjatga bog'lanishi kerak. Cascade bu qarorlarni bazaga "
+            "ishonib topshirardi.")
+
+    note(d, "Bu qoidaning menga yoqmaydigan tomoni ham bor:",
+         "Cascade yo'q bo'lsa, bolalar yozuvni o'chirishni unutib qo'yish mumkin va "
+         "baza yetim qatorlar bilan to'lib boradi. Tashqi kalit buni to'sadi — "
+         "ya'ni o'chirish xato beradi — lekin xatoni ko'rib, qo'lda tartibni "
+         "tiklash kerak bo'ladi. 6-bo'limdagi yetim yozuvlarni qidirish so'rovi "
+         "aynan shu uchun kerak bo'lib qoladi. Shuning uchun men bu qoidani "
+         "\"cascade yomon\" deb emas, \"o'chirish mantig'i aniq joyda yozilishi kerak\" "
+         "deb tushunaman: agar u ilovada bo'lsa, demak kodda ko'rinadi va testlanadi.")
+
+    h2(d, "8.4 Tarjima jadvallari")
+
+    para(d, "Yana bir qoida — ko'p tilli matnlar alohida jadvalda, `{jadval}_translate` "
+            "nomi bilan saqlanadi. Ularda ikkita tashqi kalit bor:")
+
+    code(d, """CONSTRAINT fk_adm_info_country_translate_owner_id
+    FOREIGN KEY (owner_id) REFERENCES adm.info_country(id),
+CONSTRAINT fk_adm_info_country_translate_language_id
+    FOREIGN KEY (language_id) REFERENCES adm.enum_language(id)""")
+
+    para(d, "`owner_id` ona jadvalga, `language_id` esa tillar ro'yxatiga ishora "
+            "qiladi. Bu ikkisi referentsial yaxlitlikning eng toza ko'rinishi: "
+            "mavjud bo'lmagan davlat uchun tarjima yozib bo'lmaydi, va mavjud "
+            "bo'lmagan tilda ham.")
+
+    h1(d, "9. Xulosa")
 
     bullets(d, [
         "Referensial butunlik bog'lanishlar haqiqiy yozuvlarga ishora "

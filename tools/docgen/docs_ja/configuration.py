@@ -182,7 +182,104 @@ dotnet user-secrets list""")
             "`SHOP_Smtp__Host` kaliti `Smtp:Host` ga aylanadi.")
 
     # ───────────────────────────────────────────
-    h1(d, "7. Ko'p uchraydigan muammolar")
+    h1(d, "7. Amaliyotdan: o'rin egalarini ishga tushishda almashtirish")
+
+    para(d, "Ish joyimdagi MAD ERP tizimi qirqqa yaqin xizmatdan iborat va har birining "
+            "o'z `appsettings.Production.json` fayli bor. Haqiqiy manzillar va parollar "
+            "konteynerga environment variable orqali keladi.")
+
+    para(d, ".NET ning standart yo'li — `Redis__Host` ko'rinishidagi environment variable "
+            "berish, u fayldagi qiymatni ustidan yozadi. Lekin bu yerda boshqacha "
+            "yondashuv tanlangan: fayl o'z tuzilishini saqlab qoladi, qiymatlar esa "
+            "o'rin egalari bilan ko'rsatiladi.")
+
+    code(d, """{
+  "Redis": {
+    "Host": "${redis_host}",
+    "Port": "${redis_port}",
+    "Password": "${redis_password}",
+    "DefaultDatabase": "${redis_defaultdatabase}"
+  },
+  "Idp": {
+    "BaseUrl": "${idp_baseurl}",
+    "ClientSecret": "${idp_clientsecret}"
+  }
+}""", caption="appsettings.Production.json — qiymatlar emas, o'rin egalari")
+
+    para(d, "Almashtirishni `IConfiguration` ustidagi bitta extension metod bajaradi:")
+
+    code(d, """public static void AlterEnvironmentConfiguration(this IConfiguration configuration)
+{
+    foreach (var kvp in configuration.AsEnumerable())
+    {
+        if (kvp.Value != null && kvp.Value.Contains("${"))
+        {
+            var updatedValue = kvp.Value;
+
+            foreach (var env in Environment.GetEnvironmentVariables().Cast<DictionaryEntry>())
+            {
+                var placeholder = $"${{{env.Key}}}";
+
+                if (updatedValue.Contains(placeholder))
+                {
+                    updatedValue = updatedValue.Replace(placeholder, env.Value?.ToString());
+                }
+            }
+
+            if (updatedValue != kvp.Value)
+            {
+                configuration[kvp.Key] = updatedValue;
+            }
+        }
+    }
+}""", caption="Erp.Core/Extensions/ConfigurationExtensions.cs")
+
+    para(d, "Chaqiriladigan joyi — har bir xizmatning `Program.cs` ida, konfiguratsiyadan "
+            "biror narsa o'qilishidan oldin:")
+
+    code(d, """var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AlterEnvironmentConfiguration();
+AppSettings.Init(builder.Configuration.Get<AppSettings>());""")
+
+    h2(d, "7.1 Nega shunday qilingan")
+
+    para(d, "Fayl o'zini hujjatlashtiradi: unga qarab qaysi qiymat tashqaridan kelishi "
+            "darhol ko'rinadi. Birinchi bo'limdagi tartibga tayanadigan usulda esa "
+            "fayldagi qiymat aldamchi bo'ladi — ko'rinib turgan narsa amalda "
+            "ishlatilmasligi mumkin.")
+
+    para(d, "Ikkinchi foydasi — sirlarni tekshiruvchi vositalar uchun. Repozitoriyda "
+            "`${idp_clientsecret}` satri turadi, haqiqiy parol esa hech qachon git ga "
+            "tushmaydi. Bizda `gitleaks` CI qadami bor va shu usul uni tinch qoldiradi.")
+
+    h2(d, "7.2 Qanday tuzoqlarga uchradim")
+
+    bullets(d, [
+        "**Chaqiruv tartibi.** `AlterEnvironmentConfiguration()` `Get<AppSettings>()` dan "
+        "**oldin** bo'lishi shart. Aks holda obyektga `${redis_host}` satri bog'lanib "
+        "qoladi va xato faqat Redis ga ulanish paytida, chalkash xabar bilan chiqadi.",
+        "**Env var topilmasa jim o'tadi.** Metodda hech qanday validatsiya yo'q: "
+        "o'rin egasi mos keluvchi o'zgaruvchini topmasa, u o'z holida qoladi. "
+        "Ya'ni konfiguratsiya yuklanadi, ilova ko'tariladi va muammo faqat o'sha "
+        "sozlama ishlatilganda ochiladi. Ro'yxatdagi `GetValue<T>` jim xatosining "
+        "aynan shu ko'rinishi.",
+        "**Harf registri.** Linux da environment variable nomi registrga sezgir, "
+        "shuning uchun `${redis_host}` uchun `REDIS_HOST` berish ishlamaydi. "
+        "Loyihada barcha o'rin egalari ataylab kichik harfda yozilgan.",
+        "**Yozuv faqat xotirada.** `configuration[kvp.Key] = ...` qiymatni ustidagi "
+        "xotira provayderiga yozadi, fayl o'zgarmaydi. Agar konfiguratsiya qayta "
+        "yuklansa (`reloadOnChange`), almashtirish yo'qoladi — metod boshqa chaqirilmaydi.",
+    ])
+
+    note(d, "Unumdorligi haqida:",
+         "Metod butun konfiguratsiya daraxtini aylanadi va `${` topilgan har bir qiymat "
+         "uchun barcha environment variable larni ko'rib chiqadi. Birinchi ko'rganimda "
+         "bu menga qimmat tuyuldi, keyin o'ylab ko'rdim: bu ishga tushishda bir marta, "
+         "yuzga yaqin kalit va yuzga yaqin o'zgaruvchi ustida bajariladi. Bir necha "
+         "millisekund. Optimallashtirishning hech qanday ma'nosi yo'q.")
+
+    # ───────────────────────────────────────────
+    h1(d, "8. Ko'p uchraydigan muammolar")
 
     bullets(d, [
         "**`appsettings.Development.json` production'ga tushishi.** "

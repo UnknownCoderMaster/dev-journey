@@ -253,7 +253,94 @@ builder.Services.AddHybridCache(options =>
             "himoyasi ham o'z ichida bor.")
 
     # ───────────────────────────────────────────
-    h1(d, "9. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "9. Amaliyotdan: nega butun tizimda uchta joyda ishlatilgan")
+
+    para(d, "Ish joyimdagi MAD ERP tizimi qirqqa yaqin servisdan iborat. Shu hajmdagi "
+            "kodda `IMemoryCache` bor-yo'g'i uch joyda uchraydi. Bu tasodif emas — "
+            "8-bo'limda aytilgan cheklov amalda shunday qaror qabul qilishga olib kelgan.")
+
+    h2(d, "9.1 Nega Redis tanlangan")
+
+    para(d, "Har bir servis Docker da bir nechta nusxada ishlaydi va orqasida balanslovchi "
+            "turadi. Shu sababli in-memory kesh ikki muammo beradi: nusxalar bir-birining "
+            "keshini ko'rmaydi, va keshni bekor qilish uchun hamma nusxaga xabar yetkazish "
+            "kerak bo'ladi. Shuning uchun umumiy kesh Redis da, u ustidan yupqa interfeys "
+            "yozilgan:")
+
+    code(d, """public interface IRedisService
+{
+    Task<T> GetAsync<T>(string key);
+    Task<bool> SetAsync<T>(string key, T value, TimeSpan? expiry = null);
+
+    /// Kalit YO'Q bo'lsagina yozadi (SET NX) — atomik "da'vo". true — shu chaqiruv
+    /// yozdi; false — kalit allaqachon bor. ExistsAsync + SetAsync o'rniga
+    /// ishlating: ular orasida parallel so'rov ulgurib qoladi.
+    Task<bool> SetIfNotExistsAsync<T>(string key, T value, TimeSpan? expiry = null);
+    Task<bool> DeleteAsync(string key);
+    Task<long> IncrementAsync(string key, long value = 1);
+    // ...
+}""", caption="Erp.Core/Cache/IRedisService.cs")
+
+    para(d, "Bu interfeysdagi `SetIfNotExistsAsync` — 5-bo'limdagi cache stampede "
+            "muammosining taqsimlangan tizimdagi ko'rinishi. `IMemoryCache` da bu "
+            "`SemaphoreSlim` bilan yechilardi, lekin semafor faqat bitta protsess "
+            "ichida ishlaydi. Redis ning `SET NX` buyrug'i esa atomik bo'lib, qaysi "
+            "nusxa birinchi \"da'vo qilgani\" ni hamma uchun bir xil aniqlaydi.")
+
+    h2(d, "9.2 IMemoryCache qolgan uchta joy")
+
+    para(d, "Birinchisi — tarjimalar xizmati. Tarjima matnlari deyarli o'zgarmaydi, "
+            "har bir servisda bir xil bo'ladi va juda tez-tez o'qiladi. Bu 7-bo'limdagi "
+            "mezonlarga to'liq mos keladi.")
+
+    para(d, "Ikkinchisi — bosh sahifadagi statistika paneli. Unda o'n ikkita og'ir "
+            "`COUNT` so'rovi bor: xodimlar, tashkilotlar, ijodkorlar, arizalar soni. "
+            "Qiziq yeri — keshning ikki xil muddati:")
+
+    code(d, """private const string CacheKey = "adm:login-statistics";
+private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
+private static readonly TimeSpan PartialCacheDuration = TimeSpan.FromMinutes(1);""")
+
+    para(d, "To'liq hisoblangan natija o'ttiz daqiqa yashaydi. Agar so'rovlardan birortasi "
+            "yiqilsa, natija \"qisman\" hisoblanadi va faqat bir daqiqaga keshlanadi — "
+            "ya'ni keyingi so'rov yana urinib ko'radi:")
+
+    code(d, """async Task<int?> Count(Func<Task<int>> count)
+{
+    try
+    {
+        return await count();
+    }
+    catch (Exception) when (!cancellationToken.IsCancellationRequested)
+    {
+        return null;   // bitta ko'rsatkich yiqildi — panel baribir chiqadi
+    }
+}""")
+
+    para(d, "Bu yerda ikki qaror bor. Birinchisi — bitta ko'rsatkich yiqilsa butun panel "
+            "500 qaytarmasligi: foydalanuvchi o'n bir raqamni ko'radi, bittasi o'rnida "
+            "chiziqcha turadi. Ikkinchisi — xato natijani uzoq keshlab qo'ymaslik. "
+            "6-bo'limda keshni bekor qilish qiyin ekani aytilgan; bu yerda u umuman "
+            "bekor qilinmaydi, shunchaki noto'g'ri natijaning umri qisqartirilgan.")
+
+    note(d, "Istisno filtri haqida:",
+         "`catch (Exception) when (!cancellationToken.IsCancellationRequested)` — "
+         "men buni birinchi ko'rganimda ortiqcha deb o'yladim. Aslida bu muhim: agar "
+         "mijoz so'rovni bekor qilgan bo'lsa, so'rovlar `OperationCanceledException` "
+         "bilan yiqiladi va bu yerda u \"bekor qilish\" sifatida tashqariga chiqishi "
+         "kerak, \"ko'rsatkich hisoblanmadi\" sifatida yutilib ketmasligi kerak. Aks "
+         "holda mijoz ketgan bo'lsa ham kesh yarim-yorti natija bilan to'ldirilardi.")
+
+    h2(d, "9.3 Xulosa qilib aytganda")
+
+    para(d, "Taqsimlangan tizimda `IMemoryCache` yo'qolmaydi, lekin uning o'rni "
+            "toraydi: o'zgarmaydigan va har bir nusxada baribir bir xil bo'ladigan "
+            "ma'lumot. Qolgan hammasi Redis ga o'tadi. Shuning uchun bu hujjatdagi "
+            "mavzuni o'rganish zarur, lekin undan keyin darhol taqsimlangan kesh "
+            "mavzusiga o'tish kerak — amalda ko'p vaqt o'sha bilan ishlanadi.")
+
+    h1(d, "10. Xulosa")
 
     bullets(d, [
         "`IMemoryCache` ma'lumotni ilova xotirasida saqlaydi — eng tez, lekin "

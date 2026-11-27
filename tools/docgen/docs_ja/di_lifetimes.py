@@ -212,6 +212,121 @@ public class OrderService(IServiceProvider provider)
             "dinamik holatda — masalan turga qarab handler tanlashda — "
             "ishlataman, va unda ham buni alohida fabrika klassiga yashiraman.")
 
+    # ───────────────────────────────────────────
+    h1(d, "9. Amaliyotdan: bitta joyda yig'ilgan ro'yxatga olish")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida yigirmaga yaqin servis bor va ularning "
+            "hammasi bir xil asosiy xizmatlarni ishlatadi. Shuning uchun ro'yxatga "
+            "olish umumiy kutubxonadagi bitta metodda yig'ilgan:")
+
+    code(d, """public static void ConfigureServiceInfrastructure(this IServiceCollection services)
+{
+    // Culture
+    services.AddScoped<ICultureHelper, CultureHelper>();
+
+    // Time
+    services.AddSingleton(TimeProvider.System);
+
+    // Database
+    AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+    services.AddDbContext<ApplicationDbContext>();
+    services.AddScoped<IApplicationDbContext>(provider =>
+        provider.GetRequiredService<ApplicationDbContext>());
+
+    // User
+    services.AddHttpContextAccessor();
+
+    // configure config
+    services.AddSingleton(ServiceAppSettings.ServiceInstance.Culture);
+    services.AddSingleton(ServiceAppSettings.ServiceInstance.Database);
+
+    // SequenceNextId
+    services.AddScoped<ISequenceNextIdService, SequenceNextIdService>();
+
+    // Localization
+    services.AddLocalizationService();
+}""", caption="Erp.Core.Service.Infrastructure/DependencyInjection.cs")
+
+    para(d, "Bu kichik metodda 3- va 6-bo'limlarda aytilgan hamma qarorni ko'rish "
+            "mumkin, shuning uchun uni qatorlab ko'rib chiqaman.")
+
+    h2(d, "9.1 Nega DbContext scoped")
+
+    para(d, "`AddDbContext` standart holda scoped ro'yxatga oladi — ya'ni har bir HTTP "
+            "so'rovga bitta kontekst. 6-bo'limdagi mezonlar bo'yicha bu to'g'ri: "
+            "kontekst holat saqlaydi (o'zgarishlarni kuzatadi) va thread-safe emas.")
+
+    para(d, "Agar u singleton bo'lsa, ikki so'rov bir vaqtda bir xil obyektlarni "
+            "kuzatib, bir-birining o'zgarishini saqlab qo'yardi. Agar transient bo'lsa, "
+            "bitta so'rov ichida ikki xizmat ikki xil kontekst olib, tranzaksiya "
+            "chegarasi buzilardi.")
+
+    h2(d, "9.2 Interfeys va amalga oshirish bir xil nusxa bo'lishi")
+
+    para(d, "Mana bu qatorga alohida e'tibor berdim:")
+
+    code(d, """services.AddDbContext<ApplicationDbContext>();
+services.AddScoped<IApplicationDbContext>(provider =>
+    provider.GetRequiredService<ApplicationDbContext>());""")
+
+    para(d, "Ikkinchi qator bo'lmasa, ishlovchilar `IApplicationDbContext` ni "
+            "inject qila olmasdi. Lekin uni `AddScoped<IApplicationDbContext, "
+            "ApplicationDbContext>()` deb yozish **xato** bo'lardi: unda konteyner "
+            "ikkita alohida nusxa yaratardi — biri `ApplicationDbContext` so'ralganda, "
+            "ikkinchisi interfeys so'ralganda.")
+
+    para(d, "Factory lambda esa mavjud nusxani qaytaradi. 7-bo'limda ro'yxatga "
+            "olishning qo'shimcha shakllari haqida gapirgandim; bu aynan o'sha "
+            "shaklning eng foydali ishlatilishi — bitta obyektni ikki nom ostida "
+            "ko'rsatish.")
+
+    note(d, "Bu xatoni qilish juda oson:",
+         "Ikki nusxa paydo bo'lsa, xato darhol ko'rinmaydi. Kod ishlaydi, so'rovlar "
+         "bajariladi. Faqat bir xizmat `ApplicationDbContext` ni, boshqasi "
+         "`IApplicationDbContext` ni olgan joyda ularning o'zgarishlari bir-birini "
+         "ko'rmaydi — va bitta `SaveChanges` ikkinchisining ishini saqlamaydi. "
+         "Buni topish uchun ancha vaqt ketardi, chunki bu DI xatosi bo'lib "
+         "ko'rinmaydi, baza xatosi bo'lib ko'rinadi.")
+
+    h2(d, "9.3 Singleton tanlanganlar")
+
+    bullets(d, [
+        "`TimeProvider.System` — holatsiz va thread-safe. Vaqtni `DateTime.Now` "
+        "orqali o'qish o'rniga shu xizmatni inject qilish testda vaqtni almashtirish "
+        "imkonini beradi. 1-bo'limdagi \"bog'liqlikni tashqaridan berish\" "
+        "tamoyilining juda toza misoli.",
+        "`Culture` va `Database` sozlamalari — bir marta o'qilgan, o'zgarmas "
+        "obyektlar. 6-bo'limdagi mezonga to'liq mos.",
+    ])
+
+    h2(d, "9.4 Captive dependency bu tizimda qanday chetlab o'tilgan")
+
+    para(d, "5-bo'limda captive dependency eng ko'p uchraydigan xato ekani aytilgan. "
+            "Shu tizimda uning aniq misolini ko'rdim — SDK larning HTTP handler lari. "
+            "Ular `HttpClient` bilan birga keshlanadi, ya'ni umri so'rovdan uzun, "
+            "lekin ularga joriy so'rovning foydalanuvchisi kerak.")
+
+    para(d, "Yechim — scoped xizmatni konstruktorda **olmaslik**, o'rniga "
+            "`IServiceProvider` ni olib, kerak bo'lganda so'rash:")
+
+    code(d, """public class LanguageHeaderHandler : DelegatingHandler
+{
+    private readonly IServiceProvider _serviceProvider;   // scoped emas
+
+    protected override async Task<HttpResponseMessage> SendAsync(...)
+    {
+        // Har bir so'rovda yangisini olamiz
+        var httpContext = _serviceProvider.GetService<IHttpContextAccessor>()?.HttpContext;
+        // ...
+    }
+}""")
+
+    para(d, "8-bo'limda Service Locator naqshidan qochish kerakligini yozgandim, va "
+            "bu kod aynan shunga o'xshaydi. Lekin bu yerda u oqlanadi: handler ning "
+            "umri bilan so'rovning umri mos kelmaydi, shuning uchun konstruktor "
+            "injection texnik jihatdan mumkin emas. Ya'ni Service Locator — har doim "
+            "xato emas, balki umr davrlari to'g'ri kelmaganda qoladigan oxirgi yo'l.")
+
     sources(d, [
         ("Dependency injection in ASP.NET Core",
          "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/dependency-injection"),

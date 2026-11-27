@@ -277,7 +277,120 @@ public async Task<IActionResult> Delete(int id)
          "yetarli — bu unumdorlik va aniqlik o'rtasidagi ongli murosa.")
 
     # ───────────────────────────────────────────
-    h1(d, "8. Xulosa")
+    h1(d, "8. Amaliyotdan: sessiya qora ro'yxati va fail-open qarori")
+
+    para(d, "Yuqoridagi jadvalning birinchi qatori — \"tokenni bekor qilib bo'lmaydi\" — "
+            "ish joyimdagi MAD ERP tizimida haqiqiy talab bo'lib chiqdi. Foydalanuvchi "
+            "\"chiqish\" tugmasini bosganda uning access tokeni hali kriptografik "
+            "jihatdan yaroqli bo'lib qoladi. Agar o'sha tokenni kimdir qo'lga kiritgan "
+            "bo'lsa, logout hech narsani o'zgartirmaydi.")
+
+    para(d, "Yechim — jadvalda aytilgan qora ro'yxatning o'zi. Token ichidagi sessiya "
+            "identifikatori (`jti`) Redis ga \"bekor qilingan\" deb yoziladi va har bir "
+            "so'rovda tekshiriladi. Tekshiruv uchun eng qulay joy — JWT bearer ning "
+            "`OnTokenValidated` hodisasi, ya'ni imzo va muddat allaqachon tasdiqlangandan "
+            "keyin:")
+
+    code(d, """OnTokenValidated = async ctx =>
+{
+    var userType = ctx.Principal?.FindFirst(PersonClaims.UserType)?.Value;
+    if (!string.Equals(userType, PersonClaims.UserTypePerson, StringComparison.OrdinalIgnoreCase))
+    {
+        ctx.Fail("user_type is not person");
+        return;
+    }
+
+    // Logout/revoke qilingan sessiya bo'lsa — access token amal qilmasin.
+    await TokenRevocationCheck.EnforceAsync(
+        ctx, PersonAuthRedisKeys.RevokedPrefix, JwtRegisteredClaimNames.Jti);
+}""", caption="PersonAuthExtensions.cs — tekshiruv tasdiqlashdan keyin ulanadi")
+
+    para(d, "Tekshiruvning o'zi alohida statik klassda, chunki u ikki mustaqil auth "
+            "tizimida — Keycloak va o'zimizning person-auth da — bir xil ishlatiladi:")
+
+    code(d, """var sid = ctx.Principal?.FindFirst(sidClaim)?.Value;
+if (string.IsNullOrEmpty(sid))
+    return;
+
+var redis = ctx.HttpContext.RequestServices.GetService<IRedisService>();
+if (redis == null)
+    return; // Redis yo'q — fail-open.
+
+try
+{
+    var value = await redis.GetAsync<string>(revokedKeyPrefix + sid);
+    if (value == null)
+        return; // Blacklist'da yo'q — token amal qiladi.
+
+    // Value — yozuv kuchga kiradigan vaqt (unix soniya). Rotation'da grace
+    // beriladi: shu vaqtgacha eski token bilan in-flight requestlar o'tadi.
+    // Parse bo'lmasa — fail-safe: revoked deb hisoblaymiz.
+    if (!long.TryParse(value, out var effectiveFrom) ||
+        DateTimeOffset.UtcNow.ToUnixTimeSeconds() >= effectiveFrom)
+    {
+        ctx.Fail("session revoked");
+    }
+}
+catch (Exception ex)
+{
+    // Fail-open: Redis outage butun auth'ni to'xtatib qo'ymasin.
+    logger.LogWarning(ex, "Revocation Redis tekshiruvi muvaffaqiyatsiz (fail-open)");
+}""", caption="TokenRevocationCheck.EnforceAsync")
+
+    h2(d, "8.1 Fail-open — xavfsizlik emas, biznes qarori")
+
+    para(d, "Bu kodni birinchi ko'rganimda xato deb o'yladim. Xavfsizlik tekshiruvi xato "
+            "berganda so'rovni **rad etish** kerak emasmi? Darslik javobi shunday: "
+            "fail-closed.")
+
+    para(d, "Lekin bu yerda o'ylab qaror qilingan. Agar Redis o'chganda tekshiruv so'rovni "
+            "rad etsa, Redis bilan birga butun tizim ishdan chiqadi — hech kim tizimga "
+            "kira olmaydi. Qora ro'yxat esa qo'shimcha himoya qatlami: uning asosiy ishi "
+            "bazadagi haqiqiy `revoke` ni **tezroq** kuchga kiritish. Baza darajasidagi "
+            "bekor qilish Redis dan mustaqil amalga oshadi.")
+
+    para(d, "Ya'ni ongli murosa: Redis tushgan oynada bekor qilingan token muddati "
+            "tugaguncha ishlab ketishi mumkin. Buning narxi — butun tizimning ishdan "
+            "chiqishidan past. Shuning uchun har bir bunday holatda warning log yoziladi.")
+
+    note(d, "Bir nozik tafsilot bor:",
+         "Redis javob bergan, lekin yozuv buzuq bo'lsa (`long.TryParse` ishlamasa) kod "
+         "**fail-safe** ga o'tadi va tokenni bekor deb hisoblaydi. Mantiq oddiy: yozuv "
+         "mavjud bo'lsa, demak kimdir uni ataylab yozgan. Redis ishlab turgani ham "
+         "ma'lum. Shuning uchun bu yerda ishonchsizlik tarafiga og'ish mumkin. "
+         "Ikki xil xatoga ikki xil javob — menga bu juda to'g'ri tuyuldi.")
+
+    h2(d, "8.2 Nega qiymat bo'sh emas, balki vaqt")
+
+    para(d, "Redis ga oddiygina `\"revoked\"` deb yozib qo'yish mumkin edi. Lekin qiymat "
+            "sifatida yozuv kuchga kiradigan vaqt saqlanadi, chunki token almashtirish "
+            "(rotation) paytida eski token bilan yo'lda bo'lgan so'rovlar bor:")
+
+    code(d, """// Rotation'da eski access token'ning "yashab turish" oynasi
+public static readonly TimeSpan RotationGrace = TimeSpan.FromSeconds(30);
+
+// Blacklist yozuvining Redis'da qancha saqlanishi — ataylab qat'iy
+public static readonly TimeSpan BlacklistTtl = TimeSpan.FromHours(24);""",
+         caption="SessionRevocationDefaults")
+
+    bullets(d, [
+        "**`RotationGrace = 30s`.** Refresh paytida eski token darhol o'ldirilsa, shu "
+        "paytda yo'lda bo'lgan so'rovlar `401` olib qolardi — foydalanuvchi uchun bu "
+        "tasodifiy uzilish bo'lib ko'rinadi. Logout va shubhali qayta ishlatishda esa "
+        "grace berilmaydi, bekor qilish darhol kuchga kiradi.",
+        "**`BlacklistTtl = 24h`, konfiguratsiyadan mustaqil.** Agar TTL access token "
+        "muddatiga bog'langan bo'lsa, kelajakda kimdir `AccessTokenTtlMinutes` ni "
+        "oshirgan paytda eski, hali yaroqli token \"qayta tirilib\" qolardi — qora "
+        "ro'yxat yozuvi tokendan oldin o'chib ketgani uchun. Bir yozuv taxminan 200 "
+        "bayt, TTL o'zi tozalaydi, shuning uchun generous qiymat tanlangan.",
+    ])
+
+    para(d, "Shu bilan 7-bo'limdagi \"tokenni bekor qilib bo'lmaydi\" cheklovi to'liq "
+            "yo'qolmaydi, lekin oynasi 30 soniyaga yoki undan kamga qisqaradi — stateless "
+            "tokenning asosiy yutug'ini qurbon qilmasdan.")
+
+    # ───────────────────────────────────────────
+    h1(d, "9. Xulosa")
 
     bullets(d, [
         "JWT uch qismdan iborat: header, payload, signature.",

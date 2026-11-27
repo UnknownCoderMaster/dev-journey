@@ -175,6 +175,112 @@ bool empty = name.IsNullOrBlank();     // true, exception yo'q""")
          "Formatlash, tekshirish, aylantirish, sozlashni guruhlash. "
          "Biznes qarori qabul qiladigan kod turning ichida qoladi.")
 
+    # ───────────────────────────────────────────
+    h1(d, "6. Amaliyotdan: ikkita haqiqiy extension metod")
+
+    para(d, "Ish joyimdagi MAD ERP tizimidan ikkita misol keltiraman. Ikkalasi ham "
+            "1-bo'limdagi vaziyatga to'g'ri keladi: o'zgartirish mumkin bo'lmagan "
+            "turga metod qo'shish kerak.")
+
+    h2(d, "6.1 Tranzaksiyani \"agar yo'q bo'lsa\" ochish")
+
+    para(d, "Muammo shunday. CQRS bo'yicha ishlovchilar bir-birini chaqiradi. Agar "
+            "har biri `BeginTransactionAsync()` chaqirsa, ichki ishlovchi tashqi "
+            "tranzaksiya ustiga ikkinchisini ochishga urinadi va EF Core xato beradi.")
+
+    para(d, "`DatabaseFacade` — EF Core ning turi, uni o'zgartirib bo'lmaydi. "
+            "Shuning uchun kerakli xatti-harakat extension metod sifatida qo'shilgan:")
+
+    code(d, """public static class DbContextTransactionExtensions
+{
+    /// <summary>
+    /// Agar transaction allaqachon mavjud bo'lsa — yangi ochmaydi.
+    /// Qaytgan bool = "biz ochdikmi?" (owner bo'lsak — commit qilishimiz kerak)
+    /// </summary>
+    public static async Task<(IDbContextTransaction Transaction, bool IsOwner)>
+        BeginTransactionIfNotExistsAsync(
+            this DatabaseFacade database,
+            CancellationToken cancellationToken = default)
+    {
+        var currentTransaction = database.CurrentTransaction;
+
+        if (currentTransaction != null)
+            return (currentTransaction, false); // Biz owner emasmiz
+
+        var newTransaction = await database.BeginTransactionAsync(cancellationToken);
+        return (newTransaction, true); // Biz ochdik = biz owner
+    }
+}""", caption="DbContextTransactionExtensions.cs")
+
+    para(d, "Ishlatilishi 2-bo'limdagi odatiy shaklda, `dbContext.Database` ustida:")
+
+    code(d, """var (transaction, isOwner) = await dbContext.Database
+    .BeginTransactionIfNotExistsAsync(cancellationToken);
+
+// ... ish bajariladi
+
+if (isOwner)
+    await transaction.CommitAsync(cancellationToken);""")
+
+    para(d, "Bu metodda menga yoqqan narsa — u hech qanday holat saqlamaydi. Butun "
+            "javob qaytariladigan `bool` da. Shuning uchun uni statik qilish mumkin "
+            "va 3-bo'limda aytilgan \"extension metod obyektning ichiga kira olmaydi\" "
+            "cheklovi bu yerda to'siq bo'lmaydi: `CurrentTransaction` ochiq xossa.")
+
+    h2(d, "6.2 Konfiguratsiyadagi o'rin egalarini almashtirish")
+
+    para(d, "Ikkinchi misol — `IConfiguration` ustidagi metod. Production da "
+            "sozlamalar fayllarida haqiqiy qiymat emas, `${redis_host}` ko'rinishidagi "
+            "o'rin egalari turadi. Ularni atrof-muhit o'zgaruvchilari bilan "
+            "almashtirish kerak:")
+
+    code(d, """public static void AlterEnvironmentConfiguration(this IConfiguration configuration)
+{
+    foreach (var kvp in configuration.AsEnumerable())
+    {
+        if (kvp.Value != null && kvp.Value.Contains("${"))
+        {
+            var updatedValue = kvp.Value;
+
+            foreach (var env in Environment.GetEnvironmentVariables().Cast<DictionaryEntry>())
+            {
+                var placeholder = $"${{{env.Key}}}";
+
+                if (updatedValue.Contains(placeholder))
+                    updatedValue = updatedValue.Replace(placeholder, env.Value?.ToString());
+            }
+
+            if (updatedValue != kvp.Value)
+                configuration[kvp.Key] = updatedValue;
+        }
+    }
+}""", caption="Erp.Core/Extensions/ConfigurationExtensions.cs")
+
+    para(d, "Chaqiriladigan joyi — har bir servisning `Program.cs` ida, birinchi "
+            "qatorlardan biri:")
+
+    code(d, """var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AlterEnvironmentConfiguration();
+AppSettings.Init(builder.Configuration.Get<AppSettings>());""")
+
+    h2(d, "6.3 Bu misollar 5-bo'limdagi mezonga mos keladimi")
+
+    para(d, "5-bo'limda extension metodni qachon ishlatmasligimni yozgandim — asosiy "
+            "mezon \"turni o'zgartirish imkoniyati bo'lsa, extension kerak emas\". "
+            "Ikkala misolda ham tur begona: biri EF Core ning, ikkinchisi "
+            "Microsoft.Extensions ning.")
+
+    note(d, "Lekin ikkinchi misolda bir narsa menga yoqmadi:",
+         "`AlterEnvironmentConfiguration()` nomi — fe'l, ya'ni u obyektni "
+         "**o'zgartiradi**. 3-bo'limda aytilganidek extension metod oddiy statik "
+         "metod, shuning uchun bunday qilish texnik jihatdan mumkin. Lekin "
+         "`IConfiguration` ustidagi boshqa hamma metodlar o'qish uchun "
+         "(`GetSection`, `GetValue`), va bu bittasi ularning orasida turib, "
+         "jimgina holat o'zgartiradi. Chaqiruv tartibi muhim bo'lib qolishi — "
+         "`Get<AppSettings>()` dan oldin bo'lishi shart — aynan shu sababdan. "
+         "Men bunday metodga `TrySubstituteEnvironmentPlaceholders` kabi aniqroq "
+         "nom berardim, shunda tartib muhimligi nomidan sezilib turardi.")
+
     sources(d, [
         ("Extension methods — C# programming guide",
          "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/extension-methods"),

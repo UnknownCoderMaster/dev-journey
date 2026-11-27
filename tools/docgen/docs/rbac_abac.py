@@ -236,7 +236,90 @@ var items = await query.ToListAsync(ct);""")
          "to'planib, kod esa ularni faqat chaqirishi lozim.")
 
     # ───────────────────────────────────────────
-    h1(d, "6. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "6. Amaliyotdan: huquq kodlari va ko'p ijarachilik")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida 2-bo'limdagi RBAC va 4-bo'limdagi ma'lumot "
+            "darajasidagi cheklash ikki mustaqil mexanizm sifatida yonma-yon yashaydi. "
+            "Ikkalasini ham ko'rib chiqaman, chunki ularning mas'uliyat chegarasi aniq "
+            "ajratilgan.")
+
+    h2(d, "6.1 Huquqlar — enum sifatida, satr sifatida emas")
+
+    para(d, "Har bir modulning huquqlari alohida enum da e'lon qilinadi. Enum qiymatiga "
+            "guruh, tarjimalar va modul biriktiriladi:")
+
+    code(d, """[WbPermissionEnum(AppIdConst.ADM)]
+public enum AdmPermissionCode
+{
+    [WbPermissionField(AdmPermissionSubGroupCode.Announcement, "Кўриш")]
+    [WbTranslate(LanguageIdConst.UZ_LATN, "Ko'rish")]
+    [WbTranslate(LanguageIdConst.RU, "Просмотр")]
+    [WbTranslate(LanguageIdConst.EN, "View")]
+    AnnouncementView,
+
+    [WbPermissionField(AdmPermissionSubGroupCode.Announcement, "Яратиш")]
+    [WbTranslate(LanguageIdConst.UZ_LATN, "Yaratish")]
+    AnnouncementCreate,
+    // ...
+}""", caption="Erp.Core/Security/PermissionCodes/AdmPermissionCode.cs")
+
+    para(d, "Kontrollerda tekshiruv shu enum qiymati bilan yoziladi — satr bilan emas:")
+
+    code(d, """[HttpPost]
+[Authorize(ComPermissionCode.CommissionView)]
+public async Task<IActionResult> GetListAsync([FromBody] CommissionGetListQuery query)
+    => Ok(await Mediator.Send(query));
+
+[HttpPost]
+[Authorize(ComPermissionCode.CommissionCreate)]
+public async Task<IActionResult> CreateAsync([FromBody] CommissionCreateCommand command)
+    => Ok(await Mediator.Send(command));""", caption="CommissionController")
+
+    para(d, "Buning foydasi 2-bo'limda aytilgan \"satr kodlar ehtiyotsiz\" muammosini "
+            "yopadi. Huquq nomini xato yozib bo'lmaydi — kompilyator aytadi. Huquq "
+            "o'chirilsa, uni ishlatayotgan hamma joy darhol qizil bo'ladi. Ro'yxatni "
+            "interfeysga chiqarish uchun ham qo'shimcha ish kerak emas: enum ni "
+            "reflection bilan aylanib, tarjimalari bilan birga berib yuborish mumkin.")
+
+    para(d, "Hozirda o'ttizga yaqin shunday enum bor — har bir modul uchun bittasi, "
+            "qo'shimcha `SubGroupCode` enum lari bilan ikki darajali guruhlash.")
+
+    h2(d, "6.2 Tashkilot bo'yicha izolyatsiya — qo'lda, ataylab")
+
+    para(d, "Tizim ko'p ijarachili: har bir tashkilot faqat o'z ma'lumotini ko'rishi "
+            "kerak. Barcha domen jadvallarida `organization_id` ustuni majburiy.")
+
+    para(d, "4-bo'limda aytilgan global filtr bu yerda **ishlatilmaydi**. Har bir "
+            "ishlovchi shartni o'zi yozadi:")
+
+    code(d, """var entity = await dbContext.Commissions
+    .Include(x => x.MemberTables)
+    .FirstOrDefaultAsync(x => x.Id == request.Id &&
+        x.StatusId != StatusIdConst.DELETED &&
+        x.OrganizationId == authService.CurrentOrganizationId, cancellationToken)
+    ?? throw new WbClientException()
+        .WithVisibility(WbExceptionVisibility.CLIENT_VISIBLE)
+        .WithErrors(new WbFailure { Key = "NOT_FOUND", ErrorMessage = notFoundText });""")
+
+    para(d, "Diqqat qiladigan narsa — `OrganizationId` sharti `Id` bilan birga, bitta "
+            "so'rovda turishi. Agar avval id bo'yicha o'qib, keyin tegishliligi "
+            "tekshirilsa, javobda \"ruxsat yo'q\" bilan \"topilmadi\" farqlanib qolardi — "
+            "bu 4-bo'limdagi IDOR ni aniqlashga yo'l beradigan sizib chiqish. Bu yerda "
+            "boshqa tashkilotning hujjati oddiygina mavjud emas.")
+
+    note(d, "Nega global filtr yo'q — buni o'ylab ko'rishga arziydi:",
+         "Markazlashgan `ApplicationDbContext` yuzlab `DbSet` ni o'z ichiga oladi va "
+         "hamma servis shuni ishlatadi. Ularning ichida `enum_`, `info_` kabi umumiy "
+         "jadvallar ham bor — ularda `organization_id` yo'q. Bundan tashqari ayrim "
+         "hisobot so'rovlari ataylab bir nechta tashkilot bo'yicha ishlashi kerak. "
+         "Global filtr bu holatlarni `IgnoreQueryFilters()` bilan ochishga majbur "
+         "qilardi, va o'sha chaqiruv asta-sekin hamma joyga tarqalib, filtrni ma'nosiz "
+         "qilib qo'yardi. Shuning uchun qoida kodda emas, kelishuvda: har bir so'rov "
+         "`CurrentOrganizationId` bo'yicha filtrlanadi. Narxi — unutish mumkin, va bu "
+         "aynan kod ko'rikda birinchi tekshiriladigan narsa bo'lib qoldi.")
+
+    h1(d, "7. Xulosa")
 
     bullets(d, [
         "RBAC ruxsatni rolga, ABAC esa atributlarga bog'laydi.",

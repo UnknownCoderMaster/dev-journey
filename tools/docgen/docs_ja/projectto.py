@@ -192,6 +192,87 @@ TypeAdapterConfig<Order, OrderDto>.NewConfig()
          "vaqtida yoki `AssertConfigurationIsValid()` testida "
          "aniqlanadi.")
 
+    # ───────────────────────────────────────────
+    h1(d, "7. Amaliyotdan: ProjectTo oddiy ro'yxatlarda, qo'lda projeksiya og'irlarida")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida `ProjectTo` o'n sakkizta joyda "
+            "ishlatiladi. Shu hajmdagi kodbaza uchun bu kam, va men nega shunday "
+            "ekanini tushunishga harakat qildim. Javob 4- va 6-bo'limlardagi "
+            "fikrlarni tasdiqladi.")
+
+    h2(d, "7.1 Qayerda ishlatilgan")
+
+    para(d, "Deyarli hamma holatda — sodda ma'lumotnoma ro'yxatlari. Masalan "
+            "jinslar, qarindoshlik darajalari, holatlar ro'yxati:")
+
+    code(d, """public Task<WbPagedResult<GenderBriefDto>> Handle(GenderGetListQuery request,
+                                                  CancellationToken cancellationToken)
+{
+    var genders = _context.Genders
+        .AsNoTracking()
+        .ProjectTo<GenderBriefDto>(_mapper.ConfigurationProvider);
+
+    return genders.AsPagedResultAsync(request);
+}""", caption="GenderGetListQueryHandler")
+
+    para(d, "Bu kodda `ProjectTo` ning asosiy yutug'i to'liq ishlaydi. `AsPagedResultAsync` "
+            "ustiga `Skip`/`Take` va `Count` qo'shadi, ya'ni ifoda hali ham "
+            "`IQueryable` bo'lib turishi shart. 1-bo'limdagi `Map` bilan "
+            "farq aynan shu: `Map` bo'lsa butun jadval xotiraga tushib, keyin "
+            "sahifalanardi.")
+
+    bullets(d, [
+        "`AsNoTracking()` birinchi turadi — bu DTO ga projeksiya bo'lgani uchun "
+        "kuzatuv baribir keraksiz, lekin ochiq yozilgani niyatni aniq ko'rsatadi.",
+        "Metod `async` emas — `Task` qaytaradi, `await` yo'q. Kichik tafsilot, "
+        "lekin ortiqcha holat mashinasini yaratmaydi.",
+        "DTO nomi `Brief` bilan tugaydi: ro'yxat uchun qisqa versiya. To'liq "
+        "versiya alohida DTO da.",
+    ])
+
+    h2(d, "7.2 Og'ir so'rovlarda ProjectTo ishlatilmaydi")
+
+    para(d, "Murakkab obyektlar uchun boshqa yo'l tanlangan — o'z `MapTo` "
+            "extension metodi, va unga `AsSplitQuery()` qo'shilgan:")
+
+    code(d, """var result = await _context.Persons
+    .AsNoTracking()
+    .Where(x => x.Id == request.Id)
+    .AsSplitQuery()
+    .MapTo<PersonFullDto>(_mapper, _cultureHelper)
+    .FirstOrDefaultAsync(cancellationToken);""", caption="PersonGetByIdQueryHandler")
+
+    para(d, "Bu yerda `AsSplitQuery()` bor ekaniga e'tibor bering. 4-bo'limda "
+            "`ProjectTo` ning cheklovlari haqida gapirgandim; bu real misol. "
+            "`Person` obyektiga o'nlab bog'liq jadval ulangan — manzillar, "
+            "hujjatlar, aloqa ma'lumotlari. Bitta `JOIN` bilan o'qilsa, natija "
+            "kartezian ko'paytmasiga aylanib, minglab qator qaytarardi. "
+            "`AsSplitQuery()` ularni alohida so'rovlarga bo'ladi.")
+
+    para(d, "`MapTo` ning o'z metodi bo'lishi sababi esa — `ICultureHelper`. "
+            "Tizim to'rt tilni qo'llab-quvvatlaydi va tarjimalar alohida "
+            "jadvallarda yotadi. Ya'ni projeksiya joriy tilni bilishi kerak, "
+            "AutoMapper profilining o'zi esa buni bilmaydi.")
+
+    note(d, "Mana bu menga 6-bo'limdagi fikrni boshqa tomondan ko'rsatdi:",
+         "6-bo'limda qo'lda projeksiya ko'pincha eng toza yechim ekanini yozgandim. "
+         "Bu yerda esa uchinchi yo'l tanlangan: AutoMapper qoladi, lekin uning "
+         "ustiga o'z qatlami yoziladi. Shunda profil qayta ishlatiladi, til "
+         "konteksti esa tashqaridan beriladi. Narxi — bu `MapTo` nima qilayotganini "
+         "bilish uchun yana bir fayl ochish kerak, ya'ni 1-bo'limdagi \"AutoMapper "
+         "SQL ni yashiradi\" muammosi ikki baravar kuchayadi. Qo'lda `Select` "
+         "yozilsa SQL ko'z oldida bo'lardi.")
+
+    h2(d, "7.3 Xulosa qilib")
+
+    para(d, "Shu kodbazadan chiqargan mezonim quyidagicha bo'ldi:")
+
+    table(d, ["Holat", "Tanlov"],
+          [["Sodda ro'yxat, sahifalash kerak", "`ProjectTo` — eng qisqa va to'g'ri"],
+           ["Ko'p bog'liq jadval", "`AsSplitQuery` + o'z projeksiya metodi"],
+           ["Hisoblangan maydonlar, shartli mantiq", "Qo'lda `Select` — SQL ko'rinib turadi"]],
+          widths=[7.0, 8.5])
+
     sources(d, [
         ("Queryable Extensions — AutoMapper",
          "https://docs.automapper.org/en/stable/Queryable-Extensions.html"),

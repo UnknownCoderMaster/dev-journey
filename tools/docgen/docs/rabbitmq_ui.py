@@ -274,7 +274,93 @@ rabbitmqctl set_permissions -p / app_user "^orders\\." "^orders\\." "^orders\\."
     ])
 
     # ───────────────────────────────────────────
-    h1(d, "9. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "9. Amaliyotdan: auditni navbatga chiqarish")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida RabbitMQ bitta aniq vazifa uchun ishlatiladi: "
+            "hujjat tarixini yozish. Har bir hujjat holati o'zgarganda kim, qachon, "
+            "qaysi IP dan va nimani o'zgartirgani jurnalga tushishi kerak. Bu talab "
+            "majburiy, lekin foydalanuvchi uni kutib turishi shart emas.")
+
+    para(d, "Shuning uchun servis xabarni navbatga qo'yadi va javobni qaytaradi. "
+            "Jurnalni alohida job servisi o'z vaqtida, alohida bazaga yozadi.")
+
+    h2(d, "9.1 Iste'molchi sozlamalari — panelda ko'rinadigan raqamlarning manbasi")
+
+    para(d, "3-bo'limda prefetch va iste'molchilar soni haqida gap ketgan. Kodda ular "
+            "shunday e'lon qilinadi:")
+
+    code(d, """public class DocumentHistoryConsumerConfig : IWbConsumerConfig<DocumentHistoryMessage>
+{
+    public string Name => "MadErpDocumentHistory";
+    public WbRabbitQueue Queue => AuditQueues.DocumentHistory;
+    public ushort PrefetchCount { get; set; } = 1;
+    public int WorkerCount { get; set; } = 1;
+    public bool RequeueOnFailed { get; set; } = true;
+}""", caption="DocumentHistoryConsumer.cs")
+
+    para(d, "Ro'yxatga olish esa konfiguratsiyadan ustidan yozish imkonini qoldiradi, "
+            "ya'ni bu qiymatlarni deploy qilmasdan o'zgartirish mumkin:")
+
+    code(d, """services.AddRabbitMQConsumerClient(options =>
+{
+    config.GetSection("RabbitMQ").Bind(options);
+})
+.AddConsumer<DocumentHistoryMessage, DocumentHistoryConsumerConfig, DocumentHistoryConsumer>(
+    options => config.GetSection("RabbitMQ:Consumers:DocumentHistory").Bind(options))
+.AddConsumer<RowHistoryMessage, RowHistoryConsumerConfig, RowHistoryConsumer>(
+    options => config.GetSection("RabbitMQ:Consumers:RowHistory").Bind(options));""")
+
+    para(d, "`PrefetchCount = 1` va `WorkerCount = 1` — ataylab past qiymatlar. Jurnal "
+            "yozishning tezligi muhim emas, lekin tartibi muhim: bir xil hujjat uchun "
+            "ikki o'zgarish teskari tartibda yozilib qolmasligi kerak. Panelda bu "
+            "o'zini shunday ko'rsatadi: `Unacked` ustuni deyarli har doim 1, "
+            "`Ready` esa yuk ko'tarilganda o'sadi.")
+
+    h2(d, "9.2 RequeueOnFailed — eng ko'p o'ylangan sozlama")
+
+    para(d, "5-bo'limda dead letter navbati va cheksiz aylanish muammosi aytilgan. "
+            "`RequeueOnFailed = true` aynan shu xatarni oladi: xato bergan xabar "
+            "navbatga qaytariladi.")
+
+    para(d, "Iste'molchining o'zida esa xato yutiladi va log ga yoziladi:")
+
+    code(d, """try
+{
+    await _dbContext.DocumentHistories.AddAsync(documentHistory, cancellationToken);
+    await _dbContext.SaveChangesAsync(cancellationToken);
+
+    _logger.LogInformation("Document history saved: DocId={DocId}, TableId={TableId}",
+        message.DocId, message.TableId);
+}
+catch (Exception ex)
+{
+    _logger.LogError(ex, "Error saving document history: DocId={DocId}, TableId={TableId}",
+        message.DocId, message.TableId);
+}""")
+
+    para(d, "Bu yerda nozik ziddiyat bor. `catch` xatoni tashqariga chiqarmagani uchun "
+            "broker xabarni muvaffaqiyatli deb hisoblaydi va `RequeueOnFailed` amalda "
+            "ishga tushmaydi. Ya'ni jurnal yozuvi yo'qoladi, lekin navbat tiqilib "
+            "qolmaydi.")
+
+    note(d, "Menimcha bu ongli murosa, lekin uni bilib turish kerak:",
+         "Agar xato tashqariga chiqarilsa, baza bir muddat ishlamaganda xabarlar "
+         "navbatga qaytib-qaytib kelardi va 5-bo'limda aytilgan \"poison message\" "
+         "holati paydo bo'lardi — bitta buzuq xabar butun navbatni to'xtatib qo'yardi. "
+         "Hozirgi tanlov esa teskari tarafga og'ishgan: navbat hech qachon tiqilmaydi, "
+         "lekin jurnalning to'liqligi kafolatlanmaydi. Audit uchun bu bahsli, chunki "
+         "jurnalning maqsadi aynan to'liqlik. To'g'ri yechim — xatoni chiqarib, DLQ ga "
+         "yuborish va DLQ ni panelda kuzatish. Bizda DLQ avtomatik sozlanadi, ya'ni "
+         "infratuzilma buning uchun tayyor.")
+
+    para(d, "Panelda buni tekshirish 6-bo'limdagi tartib bo'yicha oson: agar "
+            "`DocumentHistory` navbatida `Ready` nol, `Unacked` nol, lekin bazada "
+            "yozuvlar yetishmayotgan bo'lsa — demak xabarlar yutilgan, DLQ ga ham "
+            "tushmagan. Bu holatda log dan `Error saving document history` qatorlarini "
+            "qidirish kerak.")
+
+    h1(d, "10. Xulosa")
 
     bullets(d, [
         "Panel `rabbitmq_management` kengaytmasi orqali ishlaydi va "

@@ -295,7 +295,97 @@ if (addresses.Any(IsPrivateAddress))
     ])
 
     # ───────────────────────────────────────────
-    h1(d, "13. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "13. Amaliyotdan: uchta haqiqiy hodisa")
+
+    para(d, "Yuqoridagi o'n bandni o'qiganda ular bir-biridan ajratilgan, aniq "
+            "kategoriyalar bo'lib ko'rinadi. Amalda esa bitta xato bir vaqtda bir "
+            "nechta bandga tegadi. Ish joyimdagi MAD ERP tizimida uchragan uchta "
+            "holatni keltiraman.")
+
+    h2(d, "13.1 A01 — tashkilot chegarasini unutish")
+
+    para(d, "Tizim ko'p ijarachili va har bir so'rov `organization_id` bo'yicha "
+            "filtrlanishi kerak. Global filtr ataylab qo'yilmagan, ya'ni har bir "
+            "ishlovchi shartni o'zi yozadi:")
+
+    code(d, """.FirstOrDefaultAsync(x => x.Id == request.Id &&
+    x.OrganizationId == authService.CurrentOrganizationId, cancellationToken)""")
+
+    para(d, "Bu shartni unutgan ishlovchi butunlay ishlaydi, test ham o'tadi — faqat "
+            "boshqa tashkilotning id si yuborilsa ma'lumot ochiladi. Aynan A01 ning "
+            "darslikdagi ta'rifi: IDOR. Shuning uchun bizda kod ko'rikda birinchi "
+            "tekshiriladigan narsa shu shart bo'lib qoldi va ko'rik shabloniga alohida "
+            "band sifatida kiritilgan.")
+
+    h2(d, "13.2 A05 — bitta sozlama Production da fayllarni yo'qotdi")
+
+    para(d, "Fayllar MinIO da saqlanadi va har bir servis o'z bucket ini ishlatadi "
+            "(`adm`, `std`, `dxsh` va boshqalar). Bir kuni `WbMinio.Bucket` qiymati "
+            "hamma servis uchun umumiy `${minio_bucket}` o'rin egasiga o'tkazildi — "
+            "\"sozlamani markazlashtiramiz\" degan niyat bilan.")
+
+    para(d, "Natija: faqat Production da, faqat fayl yuklab olishda xato. Xabar esa "
+            "shunday ko'rinardi:")
+
+    code(d, """MinIO API responded with message=<TABLE>/<docId>/<fileId>""")
+
+    para(d, "Bu xabarni o'qish uchun bir oz vaqt ketdi. U obyekt kalitini ko'rsatadi, "
+            "ya'ni bucket ga yetib borilgan, lekin obyekt unda yo'q — demak bucket "
+            "noto'g'ri. Kod butunlay to'g'ri edi.")
+
+    note(d, "Bundan chiqargan xulosam:",
+         "\"Sirlarni konfiguratsiyaga chiqarish\" qoidasini men juda keng qo'llagan "
+         "ekanman. Endpoint va bucket nomi — sir emas, ular shunchaki manzil. Ularni "
+         "o'rin egasiga aylantirish hech narsa himoya qilmaydi, lekin servislar "
+         "orasidagi farqni yo'q qiladi. Faqat `AccessKey` va `SecretKey` o'rin egasi "
+         "bo'lishi kerak, qolgani esa har bir servisda to'g'ridan-to'g'ri yozilib "
+         "qolsin. Bu A05 ning teskari tomoni: ortiqcha \"himoya\" ham noto'g'ri "
+         "sozlanish sababi bo'ladi.")
+
+    h2(d, "13.3 Foydalanuvchi kiritgan matn HTTP sarlavhasiga tushganda")
+
+    para(d, "4-bo'limda injeksiya kontekstga bog'liq ekani aytilgan. Mana shunga real "
+            "misol, lekin SQL emas — HTTP sarlavhasi.")
+
+    para(d, "Fayl yuklab berish kodi `Content-Disposition` sarlavhasini qo'lda qurgan "
+            "edi: fayl nomi to'g'ridan-to'g'ri satr interpolatsiyasi bilan sarlavha "
+            "qiymatiga qo'yilgan.")
+
+    para(d, "HTTP sarlavhalari faqat ASCII qabul qiladi. O'zbek tilidagi fayl "
+            "nomlarida esa `o'`, `g'` va ko'pincha `‘`, `’` (U+2018, U+2019) belgilari "
+            "bor, ba'zan kirill harflari. Kestrel bunday qiymat berilgan zahoti istisno "
+            "tashlaydi:")
+
+    code(d, """Invalid non-ASCII or control character in header: 0x2018""")
+
+    para(d, "Bu `WbClientException` emas — toza 500, mijozga tushunarli xabar ham "
+            "bermaydi. Eng achinarlisi: kod allaqachon `FileDownloadName` ni to'g'ri "
+            "to'ldirgan edi, ya'ni ASP.NET Core sarlavhani o'zi, RFC 6266 bo'yicha "
+            "(ASCII `filename=` va `filename*=UTF-8''...` juftligi bilan) quradi. "
+            "Qo'lda yozilgan sarlavha shunchaki ortiqcha edi va frameworkning "
+            "to'g'ri natijasini buzardi.")
+
+    para(d, "Yechim — o'sha qatorni butunlay o'chirish:")
+
+    code(d, """return new FileStreamResult(stream, contentType)
+{
+    FileDownloadName = fileName   // sanitizatsiya va kodlashni framework bajaradi
+};""")
+
+    bullets(d, [
+        "Xato beshta servisda nusxalangan edi — `lms`, `com`, `fin`, `org`, `std`. "
+        "Tuzatish bitta joyda qilingan, qolgan to'rttasi hali ham shu holatda.",
+        "Umumiy saboq: foydalanuvchi matnini yangi kontekstga ko'chirganda "
+        "(SQL, HTML, HTTP sarlavha, fayl yo'li, log) o'sha kontekstning o'z qoidalari "
+        "bor. Agar framework shu ishni bajaradigan API bersa, uni qo'lda takrorlash "
+        "faqat zarar keltiradi.",
+        "Nusxalangan kod nuqsonni ko'paytiradi. Bitta joyda tuzatish yetarli emasligi "
+        "aniq, lekin beshta nusxani topish uchun avval ularning borligini bilish "
+        "kerak edi.",
+    ])
+
+    h1(d, "14. Xulosa")
 
     bullets(d, [
         "OWASP Top 10 — eng ko'p uchraydigan zaifliklar ro'yxati, to'liq "

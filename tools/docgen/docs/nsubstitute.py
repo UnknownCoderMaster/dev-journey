@@ -222,7 +222,86 @@ var substitute = Substitute.For<IOrderRepository, IDisposable>();""")
          "NSubstitute ni afzal ko'raman.")
 
     # ───────────────────────────────────────────
-    h1(d, "8. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: test loyihalari bor, testlar yo'q")
+
+    para(d, "Bu bo'limni yozishdan avval ikkilandim, chunki u muvaffaqiyatli yechim "
+            "haqida emas. Lekin menimcha aynan shuning uchun yozishga arziydi.")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida yigirmaga yaqin servis bor va har birining "
+            "`Erp.Service.{Domain}.UnitTest` loyihasi mavjud. NSubstitute ham, xUnit "
+            "ham bog'langan, markazlashgan paket boshqaruvida versiyalari qadalgan. "
+            "Ya'ni infratuzilma to'liq tayyor.")
+
+    para(d, "Lekin test loyihalarining ko'pi bo'sh — faqat skeleton. Bitta servisda "
+            "yozilgan yakka test fayli esa butunlay izohga olingan holatda yotadi:")
+
+    code(d, """// services/erp/erp-adm-service/test/.../Users/Commands/UserAttachCommandHandlerTest.cs
+//
+// public class UserAttachCommandHandlerTest
+// {
+//     [Fact]
+//     public async Task Handle_ValidCommand_AttachesUser()
+//     ...""", caption="Butun fayl shu holatda")
+
+    para(d, "Shuning uchun `dotnet test` yashil chiqadi va hech narsani isbotlamaydi. "
+            "Bu eng xavfli holat: komanda \"testlar o'tdi\" degan signalni oladi, "
+            "signal esa bo'sh.")
+
+    h2(d, "8.1 Nega shunday bo'ldi")
+
+    para(d, "Sababni tushunish qiyin emas. 7-bo'limda NSubstitute ning cheklovlari "
+            "aytilgan — virtual bo'lmagan a'zolarni almashtirib bo'lmasligi, statik "
+            "metodlarga yetib bo'lmasligi. Bu loyihadagi ishlovchilar esa "
+            "`IApplicationDbContext` ni oladi, ya'ni interfeys — demak mock qilish "
+            "mumkin. Muammo boshqa joyda.")
+
+    bullets(d, [
+        "Ishlovchilar ko'pincha EF Core so'rovlarining o'zidan iborat. `IApplicationDbContext` "
+        "ni mock qilsak, `DbSet` ustidagi LINQ ni ham taqlid qilish kerak bo'ladi — "
+        "bu amalda EF Core ni qayta yozish degani. Shuning uchun bunday testlar "
+        "mock emas, `InMemory` yoki haqiqiy bazani talab qiladi.",
+        "Markazlashgan `ApplicationDbContext` yuzlab `DbSet` dan iborat. Uni mock "
+        "qilish uchun kerakli `DbSet` larni sozlash o'zi ancha ish.",
+        "Ishlovchilar bir-birini `ISender` orqali chaqiradi, ya'ni test chegarasi "
+        "aniq emas: bitta ishlovchini sinash uchun zanjirning yarmi kerak bo'ladi.",
+    ])
+
+    para(d, "Ya'ni to'siq NSubstitute da emas, kodning sinovga tayyorligida. Bu "
+            "1-bo'limda aytilgan \"mock kutubxonasi faqat bog'liqlikni almashtiradi\" "
+            "degan fikrning teskari tomoni: agar bog'liqlik toza ajratilmagan bo'lsa, "
+            "kutubxona yordam bera olmaydi.")
+
+    h2(d, "8.2 Qaysi joylarda test yozish mumkin edi")
+
+    para(d, "Shu kodbazani o'rganib chiqib, mock bilan bemalol sinaladigan joylarni "
+            "ajratdim — ularda EF Core yo'q:")
+
+    bullets(d, [
+        "**Holat o'tishlari.** `StatusIdConst.CanApplyStatus(current, new)` — sof "
+        "funksiya, hech qanday bog'liqligi yo'q. Unga umuman mock kerak emas, "
+        "`[Theory]` va `[InlineData]` yetarli. Bu esa eng muhim biznes qoidasi: "
+        "qaysi holatdan qaysi holatga o'tish mumkinligi.",
+        "**Validatorlar.** FluentValidation validatorlari ham sof — kirish obyekti "
+        "beriladi, xatolar ro'yxati qaytadi.",
+        "**SDK handler lari.** `LanguageHeaderHandler` kabi `DelegatingHandler` lar "
+        "`IHttpContextAccessor` ni oladi — bu interfeys, NSubstitute bilan "
+        "almashtirish uchun ideal. 4-bo'limdagi chaqiruvlarni tekshirish shu yerda "
+        "aniq ishlardi: sarlavha qo'shildimi, ikki marta qo'shilmadimi.",
+        "**Konfiguratsiya mantig'i.** O'rin egalarini almashtiradigan metod "
+        "`IConfiguration` ustida ishlaydi va atrof-muhit o'zgaruvchilarini o'qiydi — "
+        "uni ham sinash mumkin.",
+    ])
+
+    note(d, "Bu meni qiziqtirgan savolga olib keldi:",
+         "Nega infratuzilma qurilgan, lekin ishlatilmagan? Menimcha javob shunda: test "
+         "loyihasi shablondan avtomatik yaratiladi, ya'ni uni qo'shish uchun qaror "
+         "qabul qilish kerak bo'lmagan. Test **yozish** uchun esa kerak. Shuning uchun "
+         "bo'sh test loyihasi mavjudligi hech narsani bildirmaydi, va men boshqa "
+         "loyihalarda ham endi `dotnet test` ning yashil natijasiga emas, test "
+         "fayllarining soniga qarayman.")
+
+    h1(d, "9. Xulosa")
 
     bullets(d, [
         "`Substitute.For<T>()` mock yaratadi; `.Object` kerak emas.",

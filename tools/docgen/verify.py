@@ -14,6 +14,12 @@ from docx import Document
 BASE = r"D:\ExtraWork\dev-journey\PersonalLearning"
 DIRS = {"middle-d": "Middle D", "junior-a": "Junior A"}
 OUT_DIR = os.path.join(BASE, DIRS["middle-d"])
+
+# Kirill harfi ataylab bor hujjatlar: ichida boshqa loyihadan ko'chirilgan kod
+# keltirilgan va undagi satr qiymatlari kirillda yozilgan (o'zbek kirill, rus).
+CYRILLIC_OK = {
+    "Role-based access control (RBAC), Attribute-based access control (ABAC).docx",
+}
 ALLOWED = {"000000", "3A3A3A"}
 # Men qo'lda yozgan hujjatlar — generator ularga tegmaydi, tekshirilmaydi ham
 SKIP = {"Docker rabbit postgresni sozlash.docx"}
@@ -48,9 +54,10 @@ def check(path):
     if stray:
         problems.append(f"begona rang: {', '.join(stray)}")
 
-    cyr = sorted(set(re.findall(r"[\u0400-\u04FF]+", text)))
-    if cyr:
-        problems.append(f"kirill: {', '.join(cyr[:5])}")
+    if name not in CYRILLIC_OK:
+        cyr = sorted(set(re.findall(r"[\u0400-\u04FF]+", text)))
+        if cyr:
+            problems.append(f"kirill: {', '.join(cyr[:5])}")
 
     tf = len(re.findall(r"TaskFlow", text, re.I))
     if tf > TASKFLOW_LIMIT:

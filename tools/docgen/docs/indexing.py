@@ -254,7 +254,94 @@ CREATE INDEX ix_b ON orders (customer_id);          -- keraksiz""")
          "necha marta keraksiz indeksdan qutqargan.")
 
     # ───────────────────────────────────────────
-    h1(d, "10. Xulosa")
+    # ───────────────────────────────────────────
+    h1(d, "10. Amaliyotdan: indeks qoidaga aylantirilganda")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida indekslar migratsiya fayllarida qo'lda "
+            "yoziladi — EF Core migratsiyalari ishlatilmaydi, butun sxema raqamlangan "
+            "SQL fayllari bilan boshqariladi. Shunday sharoitda 9-bo'limdagi "
+            "\"indeksni so'rovga qarab qo'yish\" yondashuvi yetarli bo'lmaydi: "
+            "dasturchilar ko'p, qoida esa yozilgan bo'lishi kerak.")
+
+    h2(d, "10.1 Nomlash — indeks nima qilishini nomidan o'qish")
+
+    para(d, "Indeks nomi `ix_{jadval}__{ustunlar}` ko'rinishida yoziladi:")
+
+    code(d, """CREATE INDEX ix_sys_employee_manage__org_id_start_on_end_on
+    ON hrm.sys_employee_manage (organization_id, start_on, end_on);
+
+CREATE INDEX ix_sys_employee_manage__doc_table_id_doc_id
+    ON hrm.sys_employee_manage (doc_table_id, doc_id);""", caption="Migratsiya faylidan")
+
+    para(d, "Bu oddiy narsadek ko'rinadi, lekin amalda juda qulay. `\\d jadval` "
+            "natijasiga qarab, indeks qaysi so'rov uchun qo'yilganini taxmin qilish "
+            "kerak bo'lmaydi — ustunlar tartibi nomda turadi. 3-bo'limdagi ustunlar "
+            "tartibi masalasi ham shu yerda ko'rinib qoladi: nomni o'qib, so'rov "
+            "`organization_id` dan boshlanishi shartligini bilish mumkin.")
+
+    h2(d, "10.2 Birinchi ustun deyarli har doim organization_id")
+
+    para(d, "Tizim ko'p ijarachili: har bir domen jadvalida `organization_id` majburiy "
+            "va har bir so'rov shu ustun bo'yicha filtrlanadi. Shuning uchun kompozit "
+            "indekslarning birinchi ustuni deyarli har doim shu bo'ladi.")
+
+    para(d, "Bu 3-bo'limdagi qoidaning to'g'ridan-to'g'ri qo'llanilishi: eng tanlovchi "
+            "emas, balki **har doim mavjud bo'ladigan** teng shart birinchi turadi. "
+            "`organization_id` tanlovchiligi past bo'lishi mumkin — katta tashkilotda "
+            "qatorlarning ko'p qismi unga tegishli — lekin u hamma so'rovda bor, "
+            "shuning uchun prefiks sifatida ishlaydi.")
+
+    code(d, """-- Bu so'rov indeksni to'liq ishlatadi
+WHERE organization_id = 42 AND start_on <= :today AND end_on >= :today
+
+-- Bu esa faqat birinchi ustunini
+WHERE organization_id = 42
+
+-- Bu umuman ishlatmaydi
+WHERE start_on <= :today""")
+
+    h2(d, "10.3 Polimorf havolaga indeks, tashqi kalitga — yo'q")
+
+    para(d, "Ikkinchi indeks qiziqroq. `doc_table_id` va `doc_id` ustunlari \"bu yozuv "
+            "qaysi hujjat asosida paydo bo'ldi\" degan savolga javob beradi. `doc_id` "
+            "ga tashqi kalit qo'yilmaydi, chunki u o'nlab jadvaldan biriga ishora "
+            "qiladi — qaysi biriga ekani `doc_table_id` ga bog'liq.")
+
+    para(d, "Ya'ni bu yerda 8-bo'limdagi odatiy holat teskari: tashqi kalit yo'q, "
+            "lekin indeks bor. Sababi aniq — \"shu buyruq qanday yozuvlar yaratdi\" "
+            "degan so'rov tez-tez bajariladi, va u ikki ustun bo'yicha ketadi. Tashqi "
+            "kalit avtomatik indeks yaratmagani uchun (PostgreSQL da u faqat birlamchi "
+            "kalit va `UNIQUE` uchun yaratiladi) buni qo'lda yozish kerak.")
+
+    note(d, "Mana bu joyda bir narsani payqadim:",
+         "Konvensiyalar hujjatida tashqi kalitlarga indeks qo'yish majburiy deb "
+         "yozilmagan. Natijada `organization_id`, `state_id`, `status_id` kabi "
+         "ustunlarda tashqi kalit bor, lekin ularning ba'zilarida alohida indeks yo'q — "
+         "ular faqat kompozit indekslarning prefiksi sifatida qoplangan. Bu ko'p "
+         "hollarda to'g'ri, chunki ortiqcha indeks `INSERT` ni sekinlashtiradi. Lekin "
+         "ona jadvaldan qator o'chirilganda PostgreSQL bolalar jadvalini indekssiz "
+         "to'liq skanerlashga majbur bo'ladi. Bizda haqiqiy `DELETE` kam bajarilgani "
+         "uchun bu sezilmaydi — yumshoq o'chirish ishlatiladi. Ya'ni bu yerda bitta "
+         "qaror (fizik o'chirmaslik) boshqa qarorni (tashqi kalit indeksini "
+         "majburiy qilmaslik) oqlab turadi. Ularning bog'liqligini ko'rish menga "
+         "qiziq bo'ldi.")
+
+    h2(d, "10.4 Nega EF Core migratsiyalari ishlatilmaydi")
+
+    para(d, "8-bo'limda indekslarni `HasIndex` bilan e'lon qilish ko'rsatilgan. Bu "
+            "loyihada mumkin emas, chunki `DbContext` markazlashgan: hamma servis "
+            "bitta `ApplicationDbContext` dan foydalanadi. Agar migratsiyalar undan "
+            "generatsiya qilinsa, bitta servisning o'zgarishi hamma uchun migratsiya "
+            "yaratardi.")
+
+    para(d, "Shuning uchun sxema qo'lda, raqamlangan fayllar bilan boshqariladi. "
+            "Narxi — indeks yozishni unutish mumkin, va kodda `HasIndex` bo'lmagani "
+            "uchun buni kod ko'rikda ko'rish qiyin. Yutug'i — indeks qanday "
+            "yaratilganini aniq nazorat qilish mumkin: `CONCURRENTLY`, qisman indeks, "
+            "`INCLUDE` ustunlari — hammasi 4- va 7-bo'limlarda aytilganidek, "
+            "to'g'ridan-to'g'ri SQL da yoziladi.")
+
+    h1(d, "11. Xulosa")
 
     bullets(d, [
         "Indeks o'qishni tezlashtiradi, yozishni sekinlashtiradi va joy "

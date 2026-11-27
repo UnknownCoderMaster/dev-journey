@@ -191,6 +191,114 @@ Console.WriteLine(first == second);    // False — turlar har xil""")
          "aniqlanadimi? Agar ha — record. Agar obyektning o'ziga xosligi "
          "(identity) muhim bo'lsa — class.")
 
+    # ───────────────────────────────────────────
+    h1(d, "8. Amaliyotdan: komanda va navbat xabarlari record sifatida")
+
+    para(d, "Ish joyimdagi MAD ERP tizimida record yuzdan ortiq faylda uchraydi va "
+            "deyarli hammasi bir xil maqsadda: CQRS komandalari, so'rovlari va "
+            "navbat xabarlari. 7-bo'limdagi \"qachon record\" savoliga bu amaliy "
+            "javob bo'ladi.")
+
+    h2(d, "8.1 Komanda — pozitsion record")
+
+    code(d, """public record CustomJobCreateCommand(
+    int JobTypeId,
+    bool IsForceUpdate,
+    string ExtendData,
+    int? OrganizationId,
+    int? RegionId,
+    int? DistrictId,
+    int? InstitutionTypeId = null,
+    int? OrganizationTypeId = null) : IRequest<WbHaveId<long>>;""",
+         caption="Erp.Service.Adm.Models/Sys/CustomJob/Commands/CustomJobCreateCommand.cs")
+
+    para(d, "Butun fayl — shu. Birinchi bo'limda aytilganidek, oddiy sinf bo'lsa "
+            "sakkiz xossa, konstruktor va `Equals` uchun yuzga yaqin qator kerak "
+            "bo'lardi.")
+
+    para(d, "`IRequest<WbHaveId<long>>` interfeysi MediatR uchun: bu komanda "
+            "bajarilganda yaratilgan yozuvning id si qaytadi. Ya'ni record "
+            "interfeysni ham amalga oshira oladi — bu menga ravshan emasdi, chunki "
+            "2-bo'limda kompilyator generatsiya qiladigan a'zolar ro'yxatiga qarab, "
+            "record ni \"yopiq\" tuzilma deb o'ylaganman.")
+
+    para(d, "Ba'zi komandalar esa yanada qisqa:")
+
+    code(d, """public record CustomJobDeleteCommand(long Id) : IRequest<bool>;""")
+
+    h2(d, "8.2 Komanda va ishlovchi bitta faylda")
+
+    para(d, "Qiziq naqsh: ba'zi joylarda komanda va uni bajaradigan ishlovchi "
+            "yonma-yon turadi:")
+
+    code(d, """public record DocumentFileDownloadCommand(
+    Guid FileId,
+    int TableId,
+    long DocumentId) : IRequest<WbStorageFile>;
+
+internal sealed class DocumentFileDownloadCommandHandler(
+    IWbStorageService wbStorage,
+    IApplicationDbContext dbContext,
+    ILocalizationBuilder localizationBuilder)
+    : IRequestHandler<DocumentFileDownloadCommand, WbStorageFile>
+{
+    public async Task<WbStorageFile> Handle(DocumentFileDownloadCommand command,
+                                            CancellationToken cancellationToken)
+    {
+        // ...
+    }
+}""")
+
+    para(d, "Record ning qisqaligi shu naqshni mumkin qiladi. Agar komanda uchun "
+            "yuz qatorlik sinf kerak bo'lsa, uni alohida faylga chiqarishga majbur "
+            "bo'lardik. Bitta ekranda esa ikkisini birga ko'rish mumkin.")
+
+    h2(d, "8.3 Navbat xabarlari")
+
+    code(d, """public record DocumentHistoryMessage : IWbQueueMessage
+{
+    public DateTime DateAt { get; init; }
+    public long UserId { get; init; }
+    public int TableId { get; init; }
+    public long DocId { get; init; }
+    // ...
+}""")
+
+    para(d, "Bu yerda pozitsion emas, oddiy xossalar bilan yozilgan — maydonlar ko'p "
+            "va JSON dan deserializatsiya qilinadi. `init` esa 5-bo'limda aytilgan "
+            "o'zgarmaslikni ta'minlaydi: xabar navbatdan olingandan keyin uni "
+            "o'zgartirib bo'lmaydi.")
+
+    para(d, "Bu ayniqsa muhim, chunki xabar xato bo'lganda navbatga qaytarilishi "
+            "mumkin. Agar iste'molchi uni yo'l-yo'lakay o'zgartirgan bo'lsa, "
+            "ikkinchi urinishda boshqa ma'lumot bilan ishlanardi.")
+
+    h2(d, "8.4 Record ishlatilmagan joy")
+
+    para(d, "Entity lar record emas — oddiy sinflar, `get; set;` xossalar bilan:")
+
+    code(d, """[Table("doc_commission", Schema = "com")]
+public class Commission : BaseEntity<long>, IAuditTrackEntity
+{
+    [Column("status_id")]
+    public int StatusId { get; set; }
+    // ...
+}""")
+
+    para(d, "7-bo'limdagi mezon bo'yicha bu to'g'ri. EF Core entity larni kuzatadi va "
+            "ularning maydonlarini o'zgartiradi — `init` bo'lsa buni qila olmasdi. "
+            "Bundan tashqari entity ning tengligi uning qiymatlari bo'yicha emas, "
+            "birlamchi kaliti bo'yicha aniqlanadi. Record ning qiymat bo'yicha "
+            "tengligi bu yerda noto'g'ri javob berardi: bir xil ma'lumotli ikki "
+            "qator teng deb hisoblanardi.")
+
+    note(d, "Shundan chiqargan sodda qoida:",
+         "Record — chegaradan o'tadigan ma'lumot uchun: komanda, so'rov, DTO, navbat "
+         "xabari. Ular bir marta yaratiladi, uzatiladi va o'qiladi. Sinf — umri uzun "
+         "va holati o'zgaradigan obyektlar uchun: entity, xizmat. Bu chegara menga "
+         "juda tushunarli bo'lib qoldi, chunki uni bitta kodbazada ikkisi yonma-yon "
+         "turgan holda ko'rdim.")
+
     sources(d, [
         ("Records — C# reference",
          "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/record"),
